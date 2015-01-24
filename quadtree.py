@@ -28,6 +28,8 @@ class QuadTree():
         return cls(data, mins, maxs)
 
     def __init__(self, data, mins=None, maxs=None):
+        self.data = data
+
         if mins is None:
             assert maxs is None
             mins = 0, 0
@@ -66,21 +68,44 @@ class QuadTree():
         return (slice(self.mins[0], self.maxs[0], None),
                 slice(self.mins[1], self.maxs[1], None))
 
-def _plane_ray_intersect(plane, ray_origin, ray_dir):
+
+def _plane_ray_intersect(plane, ray_origin, ray_dir, max_ray_len=None):
     normal, distance = plane
-    # No collision if the ray is parallel to the plane
+
+    # No intersection if the ray is parallel to the plane.
     if normal.T * ray_dir == 0.0:
         return None
     ray_len = ((normal.T * ray_origin)[0, 0] /
                (normal.T * ray_dir)[0, 0])
-    # No collison if ray is shooting away from the plane
+
+    # No intersection if ray is shooting away from the plane.
     if ray_len < 0:
         return None
+
+    # No intersection if the plane is too far away.
+    if max_ray_len is not None and ray_len > max_ray_len:
+        return None
+
+    # Otherwise, project the ray.
     poi = ray_origin + ray_len * ray_dir
 
     return poi
+
+
+def _point_infront_of_plane(plane, point):
+    n, d = plane
+    return (n.T * point)[0, 0] > d
+
     
-def _convex_polyhedron_ray_intersect(planes, ray_origin, ray_dir):
+def _convex_polyhedron_ray_intersect(planes,
+                                     ray_origin,
+                                     ray_dir,
+                                     max_ray_len=None):
+    # First check if the ray starts within the volume.
+    if all(_point_infront_of_plane(p, ray_origin) for p in planes):
+        return True
+
+    # Otherwise, work out whether the ray intersects with the volume.
     for plane, i in enumerate(planes):
         poi = _plane_ray_intersect(plane, ray_origin, ray_dir)
         if poi is None:
@@ -91,7 +116,11 @@ def _convex_polyhedron_ray_intersect(planes, ray_origin, ray_dir):
     return False
     
 
-def _aa_box_ray_intersect(box_mins, box_maxs, ray_origin, ray_dir):
+def _aa_box_ray_intersect(box_mins,
+                          box_maxs,
+                          ray_origin,
+                          ray_dir,
+                          max_ray_len=None):
     """
     Intersect a ray and an axially aligned box.
 
@@ -116,7 +145,8 @@ def _aa_box_ray_intersect(box_mins, box_maxs, ray_origin, ray_dir):
         planes.append(min_plane)
         planes.append(max_plane)
 
-    return _convex_polyhedron_ray_intersect(planes, ray_origin, ray_dir)
+    return _convex_polyhedron_ray_intersect(planes, ray_origin, ray_dir,
+                                            max_ray_len)
 
 
 class HeightMap(QuadTree):
@@ -124,6 +154,8 @@ class HeightMap(QuadTree):
     A representation of a 3-D volume, defined by a heightmap.
 
     """
+
+    RAY_OFFSET = 0.1
 
     def get_bounding_box(self):
         """
@@ -147,18 +179,34 @@ class HeightMap(QuadTree):
                  numpy.matrix([[self.maxs[1], self.maxs[0], self.min_val]])).T
                )
 
-    def shoot_ray(self, ray_origin, ray_dir, stop_quad=None):
+    def shoot_ray(self, ray_origin, ray_dir, max_ray_len=None):
         if _aa_box_ray_intersect(*get_inscribing_box(self),
-                                 ray_origin, ray_dir):
+                                 ray_origin, ray_dir, max_ray_len):
             return True
         if not _aa_box_ray_intersect(*get_bounding_box(self),
-                                     ray_origin, ray_dir):
+                                     ray_origin, ray_dir, max_ray_len):
             return False
 
         # If this is a leaf, then the inscribing box should be the same as the
         # bounding box, hence one of the above conditions would have passed and
         # the function would have returned.
         assert self.children
+
+
+    def get_visible(self, eye_point):
+        visible = numpy.zeros(self.data.shape)
+        for c in xrange(self.data.shape[1]):
+            for r in xrange(self.data.shape[0]):
+                ray_end = numpy.matrix([[c],
+                                        [r],
+                                        [self.data[r, c] + self.RAY_OFFSET])
+                
+                ray_dir = (ray_end - eye_point)
+                max_ray_len = numpy.linalg.norm(ray_dir);
+                ray_dir /= max_ray_len
+
+                visible = self.shoot_ray(eye_point, ray_dir, max_ray_len):
+                    
 
         
 
