@@ -1,3 +1,4 @@
+import math
 #import numpypy
 import numpy
 import random
@@ -77,10 +78,15 @@ def _plane_ray_intersect(plane, ray_origin, ray_dir, max_ray_len=None):
     normal, distance = plane
 
     # No intersection if the ray is parallel to the plane.
-    if normal.T * ray_dir == 0.0:
+    origin_dot = (normal[0, 0] * ray_origin[0, 0] +
+                  normal[1, 0] * ray_origin[1, 0] +
+                  normal[2, 0] * ray_origin[2, 0])
+    dir_dot = (normal[0, 0] * ray_dir[0, 0] +
+               normal[1, 0] * ray_dir[1, 0] +
+               normal[2, 0] * ray_dir[2, 0])
+    if dir_dot == 0.0:
         return None
-    ray_len = ((distance - (normal.T * ray_origin)[0, 0]) /
-               (normal.T * ray_dir)[0, 0])
+    ray_len = (distance - origin_dot) / dir_dot
 
     # No intersection if ray is shooting away from the plane.
     if ray_len < 0:
@@ -98,7 +104,9 @@ def _plane_ray_intersect(plane, ray_origin, ray_dir, max_ray_len=None):
 
 def _point_infront_of_plane(plane, point):
     n, d = plane
-    return (n.T * point)[0, 0] >= d
+    return (n[0, 0] * point[0, 0] +
+            n[1, 0] * point[1, 0] +
+            n[2, 0] * point[2, 0]) >= d
 
     
 def _convex_polyhedron_ray_intersect(planes,
@@ -139,10 +147,10 @@ def _aa_box_ray_intersect(box,
     box_mins, box_maxs = box
     planes = []
     for axis in (0, 1, 2):
-        min_plane = (numpy.matrix(numpy.zeros((3, 1))), box_mins[axis, 0])
+        min_plane = (numpy.array(numpy.zeros((3, 1))), box_mins[axis, 0])
         min_plane[0][axis, 0] = 1.0
 
-        max_plane = (numpy.matrix(numpy.zeros((3, 1))), -box_maxs[axis, 0])
+        max_plane = (numpy.array(numpy.zeros((3, 1))), -box_maxs[axis, 0])
         max_plane[0][axis, 0] = -1.0
 
         planes.append(min_plane)
@@ -177,8 +185,8 @@ class HeightMap(QuadTree):
         If a point is not in this box, then it is not within the volume.
 
         """
-        return ( numpy.matrix([[self.mins[1], self.mins[0], 0.0]]).T,
-                 numpy.matrix([[self.maxs[1], self.maxs[0], self.max_val]]).T
+        return ( numpy.array([[self.mins[1], self.mins[0], 0.0]]).T,
+                 numpy.array([[self.maxs[1], self.maxs[0], self.max_val]]).T
                )
 
     def get_inscribing_box(self):
@@ -188,8 +196,8 @@ class HeightMap(QuadTree):
         If a point is in this box, then it is within the volume.
 
         """
-        return ( numpy.matrix([[self.mins[1], self.mins[0], 0.0]]).T,
-                 numpy.matrix([[self.maxs[1], self.maxs[0], self.min_val]]).T
+        return ( numpy.array([[self.mins[1], self.mins[0], 0.0]]).T,
+                 numpy.array([[self.maxs[1], self.maxs[0], self.min_val]]).T
                )
 
     def shoot_ray(self, ray_origin, ray_dir, max_ray_len=None):
@@ -220,12 +228,13 @@ class HeightMap(QuadTree):
         for r in xrange(self.data.shape[0]):
             print "Row {} / {}".format(r, self.data.shape[0])
             for c in xrange(self.data.shape[1]):
-                ray_end = numpy.matrix([[c + 0.5],
+                ray_end = numpy.array([[c + 0.5],
                                         [r + 0.5],
                                         [self.data[r, c] + self.RAY_OFFSET]])
                 
                 ray_dir = (ray_end - eye_point)
-                max_ray_len = numpy.linalg.norm(ray_dir);
+                max_ray_len = math.sqrt(ray_dir[0, 0] ** 2 +
+                                        ray_dir[1, 0] ** 2)
                 ray_dir /= max_ray_len
 
                 if self.shoot_ray(eye_point, ray_dir, max_ray_len):
@@ -289,7 +298,7 @@ def test_visibility():
     d[20:28, 25:33] = numpy.ones((8, 8))
     d[36:44, 25:33] = .5 * numpy.ones((8, 8))
     d[11:19, 18:22] = .5 * numpy.ones((8, 4))
-    eye_point = numpy.matrix([[40.5, 32.5, 2.0]]).T
+    eye_point = numpy.array([[40.5, 32.5, 2.0]]).T
     
     height_map = HeightMap(d) 
 
@@ -322,5 +331,6 @@ if __name__ == "__main__":
     from pprint import pprint as pp
     for k, v in sorted(stats.iteritems()):
         print "{}: {}".format(k, v)
+    print rays_shot / (64. * 64.)
 
 
