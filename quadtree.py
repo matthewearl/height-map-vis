@@ -1,5 +1,5 @@
 import math
-#import numpypy
+import numpypy
 import numpy
 import random
 
@@ -78,12 +78,12 @@ def _plane_ray_intersect(plane, ray_origin, ray_dir, max_ray_len=None):
     normal, distance = plane
 
     # No intersection if the ray is parallel to the plane.
-    origin_dot = (normal[0, 0] * ray_origin[0, 0] +
-                  normal[1, 0] * ray_origin[1, 0] +
-                  normal[2, 0] * ray_origin[2, 0])
-    dir_dot = (normal[0, 0] * ray_dir[0, 0] +
-               normal[1, 0] * ray_dir[1, 0] +
-               normal[2, 0] * ray_dir[2, 0])
+    origin_dot = (normal[0] * ray_origin[0] +
+                  normal[1] * ray_origin[1] +
+                  normal[2] * ray_origin[2])
+    dir_dot = (normal[0] * ray_dir[0] +
+               normal[1] * ray_dir[1] +
+               normal[2] * ray_dir[2])
     if dir_dot == 0.0:
         return None
     ray_len = (distance - origin_dot) / dir_dot
@@ -104,9 +104,9 @@ def _plane_ray_intersect(plane, ray_origin, ray_dir, max_ray_len=None):
 
 def _point_infront_of_plane(plane, point):
     n, d = plane
-    return (n[0, 0] * point[0, 0] +
-            n[1, 0] * point[1, 0] +
-            n[2, 0] * point[2, 0]) >= d
+    return (n[0] * point[0] +
+            n[1] * point[1] +
+            n[2] * point[2]) >= d
 
     
 def _convex_polyhedron_ray_intersect(planes,
@@ -145,16 +145,16 @@ def _aa_box_ray_intersect(box,
 
     """
     box_mins, box_maxs = box
-    planes = []
-    for axis in (0, 1, 2):
-        min_plane = (numpy.array(numpy.zeros((3, 1))), box_mins[axis, 0])
-        min_plane[0][axis, 0] = 1.0
-
-        max_plane = (numpy.array(numpy.zeros((3, 1))), -box_maxs[axis, 0])
-        max_plane[0][axis, 0] = -1.0
-
-        planes.append(min_plane)
-        planes.append(max_plane)
+    ray_origin = list(ray_origin.flatten())
+    ray_dir = list(ray_dir.flatten())
+    planes = [
+        ([1.0,0.0,0.0], box_mins[0, 0]),
+        ([-1.0,0.0,0.0], -box_maxs[0, 0]),
+        ([0.0,1.0,0.0], box_mins[1, 0]),
+        ([0.0,-1.0,0.0], -box_maxs[1, 0]),
+        ([0.0,0.0,1.0], box_mins[2, 0]),
+        ([0.0,0.0,-1.0], -box_maxs[2, 0]),
+    ]
 
     return _convex_polyhedron_ray_intersect(planes, ray_origin, ray_dir,
                                             max_ray_len)
@@ -294,11 +294,12 @@ def test_quadtree():
     test_recursive(quadtree)
 
 def test_visibility():
-    d = numpy.zeros((64, 64))
-    d[20:28, 25:33] = numpy.ones((8, 8))
-    d[36:44, 25:33] = .5 * numpy.ones((8, 8))
-    d[11:19, 18:22] = .5 * numpy.ones((8, 4))
-    eye_point = numpy.array([[40.5, 32.5, 2.0]]).T
+    k = 1
+    d = numpy.zeros((k*64, k*64))
+    d[k*20:k*28, k*25:k*33] = numpy.ones((k*8, k*8))
+    d[k*36:k*44, k*25:k*33] = .5 * numpy.ones((k*8, k*8))
+    d[k*11:k*19, k*18:k*22] = .5 * numpy.ones((k*8, k*4))
+    eye_point = numpy.array([[k*40.5, k*32.5, 2.0]]).T
     
     height_map = HeightMap(d) 
 
@@ -324,6 +325,8 @@ def test_visibility():
 
 if __name__ == "__main__":
     #test_quadtree()
+    #import cProfile
+    #cProfile.run('test_visibility()', sort='time')
     test_visibility()
 
     print repr(stats)
