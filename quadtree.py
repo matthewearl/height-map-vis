@@ -70,13 +70,14 @@ class QuadTree():
 
 
 def _plane_ray_intersect(plane, ray_origin, ray_dir, max_ray_len=None):
+    import pdb; pdb.set_trace()
     normal, distance = plane
 
     # No intersection if the ray is parallel to the plane.
     if normal.T * ray_dir == 0.0:
         return None
-    ray_len = ((normal.T * ray_origin)[0, 0] /
-               (normal.T * ray_dir)[0, 0])
+    ray_len = -((normal.T * ray_origin)[0, 0] /
+                (normal.T * ray_dir)[0, 0])
 
     # No intersection if ray is shooting away from the plane.
     if ray_len < 0:
@@ -101,45 +102,46 @@ def _convex_polyhedron_ray_intersect(planes,
                                      ray_origin,
                                      ray_dir,
                                      max_ray_len=None):
+    import pdb; pdb.set_trace()
+
     # First check if the ray starts within the volume.
     if all(_point_infront_of_plane(p, ray_origin) for p in planes):
         return True
 
     # Otherwise, work out whether the ray intersects with the volume.
-    for plane, i in enumerate(planes):
-        poi = _plane_ray_intersect(plane, ray_origin, ray_dir)
+    for i, plane in enumerate(planes):
+        poi = _plane_ray_intersect(plane, ray_origin, ray_dir, max_ray_len)
         if poi is None:
             continue
-        if all((n.T * poi)[0, 0] > d for n, d in
-                    (p for p, j in enumerate(planes) if j != i)):
+        if all(_point_infront_of_plane(p, poi) or n, d in
+                    (p for j, p in enumerate(planes) if j != i)):
             return True
     return False
     
 
-def _aa_box_ray_intersect(box_mins,
-                          box_maxs,
+def _aa_box_ray_intersect(box,
                           ray_origin,
                           ray_dir,
                           max_ray_len=None):
     """
     Intersect a ray and an axially aligned box.
 
-    box_mins:
-        A (3, 1) vector of the point on the box nearest the origin.
-    box_maxs:
-        A (3, 1) vector of the point on the box furthest from the origin.
+    box:
+        A pair of (3, 1) vectors, describing the vertex of an axially aligned
+        box nearest the origin, and furthest from the origin, respectively.
     ray_origin:
         A (3, 1) vector locating the origin of the ray.
     ray_dir:
         A normalized (3, 1) vector giving the ray direction.
 
     """
+    box_mins, box_maxs = box
     planes = []
     for axis in (0, 1, 2):
-        min_plane = (numpy.matrix(numpy.zeros((3, 1))), box_mins[axis])
+        min_plane = (numpy.matrix(numpy.zeros((3, 1))), box_mins[axis, 0])
         min_plane[0][axis, 0] = 1.0
 
-        max_plane = (numpy.matrix(numpy.zeros((3, 1))), box_maxs[axis])
+        max_plane = (numpy.matrix(numpy.zeros((3, 1))), box_maxs[axis, 0])
         max_plane[0][axis, 0] = -1.0
 
         planes.append(min_plane)
@@ -147,7 +149,6 @@ def _aa_box_ray_intersect(box_mins,
 
     return _convex_polyhedron_ray_intersect(planes, ray_origin, ray_dir,
                                             max_ray_len)
-
 
 class HeightMap(QuadTree):
     """
@@ -165,7 +166,7 @@ class HeightMap(QuadTree):
 
         """
         return ( numpy.matrix([[self.mins[1], self.mins[0], 0.0]]).T,
-                 numpy.matrix([[self.maxs[1], self.maxs[0], self.max_val]])).T
+                 numpy.matrix([[self.maxs[1], self.maxs[0], self.max_val]]).T
                )
 
     def get_inscribing_box(self):
@@ -176,14 +177,14 @@ class HeightMap(QuadTree):
 
         """
         return ( numpy.matrix([[self.mins[1], self.mins[0], 0.0]]).T,
-                 numpy.matrix([[self.maxs[1], self.maxs[0], self.min_val]])).T
+                 numpy.matrix([[self.maxs[1], self.maxs[0], self.min_val]]).T
                )
 
     def shoot_ray(self, ray_origin, ray_dir, max_ray_len=None):
-        if _aa_box_ray_intersect(*get_inscribing_box(self),
+        if _aa_box_ray_intersect(self.get_inscribing_box(),
                                  ray_origin, ray_dir, max_ray_len):
             return True
-        if not _aa_box_ray_intersect(*get_bounding_box(self),
+        if not _aa_box_ray_intersect(self.get_bounding_box(),
                                      ray_origin, ray_dir, max_ray_len):
             return False
 
@@ -192,23 +193,32 @@ class HeightMap(QuadTree):
         # the function would have returned.
         assert self.children
 
+        return any(c.shoot_ray(ray_origin, ray_dir, max_ray_len)
+                            for c in self.children)
+
 
     def get_visible(self, eye_point):
         visible = numpy.zeros(self.data.shape)
-        for c in xrange(self.data.shape[1]):
-            for r in xrange(self.data.shape[0]):
-                ray_end = numpy.matrix([[c],
-                                        [r],
-                                        [self.data[r, c] + self.RAY_OFFSET])
+        for r in xrange(self.data.shape[0]):
+            print "Row {} / {}".format(r, self.data.shape[0])
+            for c in xrange(self.data.shape[1]):
+                c = 22
+                r = 22
+                ray_end = numpy.matrix([[c + 0.5],
+                                        [r + 0.5],
+                                        [self.data[r, c] + self.RAY_OFFSET]])
                 
                 ray_dir = (ray_end - eye_point)
                 max_ray_len = numpy.linalg.norm(ray_dir);
                 ray_dir /= max_ray_len
 
-                visible = self.shoot_ray(eye_point, ray_dir, max_ray_len):
-                    
+                import pdb; pdb.set_trace()
+                if self.shoot_ray(eye_point, ray_dir, max_ray_len):
+                    visible[r, c] = 1.0
+                else:
+                    visible[r, c] = 0.0
+        return visible
 
-        
 
 def print_quadtree(quadtree, indent=0):
     print " " * indent + "axis={} mins={} maxs={}".format(quadtree.split_axis,
@@ -228,7 +238,7 @@ def random_array(shape):
 
 def test_quadtree():
     print "Generating array"
-    d = random_array((1000, 1000))
+    d = random_array((100, 100))
     
     def test_recursive(q):
         # Check the stored minimum/maximum values are correct.
@@ -259,7 +269,34 @@ def test_quadtree():
     print "Testing"
     test_recursive(quadtree)
 
+def test_visibility():
+    d = numpy.zeros((64, 64))
+    d[25:33, 25:33] = numpy.ones((8, 8))
+    eye_point = numpy.matrix([[32.5, 32.5, 2.0]]).T
+    
+    height_map = HeightMap(d) 
+
+    def print_mat(m):
+        def el_to_char(e):
+            if e == 0.0:
+                return ' '
+            else:
+                return '{}'.format(e)[0]
+        for c in xrange(m.shape[1]):
+            print ''.join(el_to_char(m[r, c]) for r in xrange(m.shape[0]))
+
+    print_mat(d)
+
+    v = height_map.get_visible(eye_point)
+
+    print_mat(v)
+
+    from matplotlib import pyplot as plt
+    plt.imshow(v, interpolation='nearest')
+    plt.show()
+
 
 if __name__ == "__main__":
     test_quadtree()
+    test_visibility()
 
