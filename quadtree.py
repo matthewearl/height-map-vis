@@ -114,7 +114,10 @@ def _convex_polyhedron_ray_intersect(planes,
                                      ray_dir,
                                      max_ray_len=None):
     # First check if the ray starts within the volume.
-    if all(_point_infront_of_plane(p, ray_origin) for p in planes):
+    for p in planes:
+        if not _point_infront_of_plane(p, ray_origin):
+            break
+    else:
         return True
 
     # Otherwise, work out whether the ray intersects with the volume.
@@ -122,9 +125,17 @@ def _convex_polyhedron_ray_intersect(planes,
         poi = _plane_ray_intersect(plane, ray_origin, ray_dir, max_ray_len)
         if poi is None:
             continue
-        if all(_point_infront_of_plane(p, poi) for p in
-                    (p for j, p in enumerate(planes) if j != i)):
+
+        # Check that the POI is infront of all the other planes.
+        for j,  p in enumerate(planes):
+            if j == i:
+                continue
+            if not _point_infront_of_plane(p, poi):
+                break
+        else:
+            # Loop comoleted
             return True
+
     return False
     
 
