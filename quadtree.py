@@ -7,6 +7,10 @@ __all__ = (
     'print_quadtree',
 )
 
+rays_shot = 0
+import collections
+stats = collections.defaultdict(int)
+
 class QuadTree(object):
     """
     A quadtree is a tree representation of an array.
@@ -189,6 +193,12 @@ class HeightMap(QuadTree):
                )
 
     def shoot_ray(self, ray_origin, ray_dir, max_ray_len=None):
+        global rays_shot
+        global stats
+        rays_shot += 1
+        shape = self.maxs[0] - self.mins[0], self.maxs[1] - self.mins[1]
+        stats[shape] += 1 
+
         if _aa_box_ray_intersect(self.get_inscribing_box(),
                                  ray_origin, ray_dir, max_ray_len):
             return True
@@ -298,12 +308,19 @@ def test_visibility():
 
     print_mat(v)
 
-    from matplotlib import pyplot as plt
-    plt.imshow(v, interpolation='nearest')
-    plt.show()
+    #from matplotlib import pyplot as plt
+    #plt.imshow(v, interpolation='nearest')
+    #plt.show()
 
 
 if __name__ == "__main__":
-    test_quadtree()
+    #test_quadtree()
     test_visibility()
+
+    print repr(stats)
+    print stats
+    from pprint import pprint as pp
+    for k, v in sorted(stats.iteritems()):
+        print "{}: {}".format(k, v)
+
 
