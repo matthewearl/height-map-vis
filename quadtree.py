@@ -76,8 +76,8 @@ def _plane_ray_intersect(plane, ray_origin, ray_dir, max_ray_len=None):
     # No intersection if the ray is parallel to the plane.
     if normal.T * ray_dir == 0.0:
         return None
-    ray_len = -((normal.T * ray_origin)[0, 0] /
-                (normal.T * ray_dir)[0, 0])
+    ray_len = distance - ((normal.T * ray_origin)[0, 0] /
+                          (normal.T * ray_dir)[0, 0])
 
     # No intersection if ray is shooting away from the plane.
     if ray_len < 0:
@@ -113,7 +113,7 @@ def _convex_polyhedron_ray_intersect(planes,
         poi = _plane_ray_intersect(plane, ray_origin, ray_dir, max_ray_len)
         if poi is None:
             continue
-        if all(_point_infront_of_plane(p, poi) or n, d in
+        if all(_point_infront_of_plane(p, poi) for p in
                     (p for j, p in enumerate(planes) if j != i)):
             return True
     return False
@@ -141,7 +141,7 @@ def _aa_box_ray_intersect(box,
         min_plane = (numpy.matrix(numpy.zeros((3, 1))), box_mins[axis, 0])
         min_plane[0][axis, 0] = 1.0
 
-        max_plane = (numpy.matrix(numpy.zeros((3, 1))), box_maxs[axis, 0])
+        max_plane = (numpy.matrix(numpy.zeros((3, 1))), -box_maxs[axis, 0])
         max_plane[0][axis, 0] = -1.0
 
         planes.append(min_plane)
