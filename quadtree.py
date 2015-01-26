@@ -7,7 +7,7 @@ __all__ = (
     'print_quadtree',
 )
 
-class QuadTree():
+class QuadTree(object):
     """
     A quadtree is a tree representation of an array.
 
@@ -70,14 +70,13 @@ class QuadTree():
 
 
 def _plane_ray_intersect(plane, ray_origin, ray_dir, max_ray_len=None):
-    import pdb; pdb.set_trace()
     normal, distance = plane
 
     # No intersection if the ray is parallel to the plane.
     if normal.T * ray_dir == 0.0:
         return None
-    ray_len = distance - ((normal.T * ray_origin)[0, 0] /
-                          (normal.T * ray_dir)[0, 0])
+    ray_len = ((distance - (normal.T * ray_origin)[0, 0]) /
+               (normal.T * ray_dir)[0, 0])
 
     # No intersection if ray is shooting away from the plane.
     if ray_len < 0:
@@ -102,8 +101,6 @@ def _convex_polyhedron_ray_intersect(planes,
                                      ray_origin,
                                      ray_dir,
                                      max_ray_len=None):
-    import pdb; pdb.set_trace()
-
     # First check if the ray starts within the volume.
     if all(_point_infront_of_plane(p, ray_origin) for p in planes):
         return True
@@ -156,7 +153,18 @@ class HeightMap(QuadTree):
 
     """
 
+    # Distance above the terrain from which shadow rays will be cast. This is
+    # to avoid the shadow ray intersecting with the section being tested.
     RAY_OFFSET = 0.1
+    
+    # The z-position of the lower bounds of the volume represented by the
+    # height map. (The upper bounds are defined by the height map data, and the
+    # side bounds are defined by the input array dimensions.)
+    MIN_HEIGHT = -1.0
+
+    def __init__(self, data, *args, **kwargs):
+        assert self.MIN_HEIGHT < numpy.min(data)
+        super(HeightMap, self).__init__(data, *args, **kwargs)
 
     def get_bounding_box(self):
         """
@@ -202,8 +210,6 @@ class HeightMap(QuadTree):
         for r in xrange(self.data.shape[0]):
             print "Row {} / {}".format(r, self.data.shape[0])
             for c in xrange(self.data.shape[1]):
-                c = 22
-                r = 22
                 ray_end = numpy.matrix([[c + 0.5],
                                         [r + 0.5],
                                         [self.data[r, c] + self.RAY_OFFSET]])
@@ -212,7 +218,6 @@ class HeightMap(QuadTree):
                 max_ray_len = numpy.linalg.norm(ray_dir);
                 ray_dir /= max_ray_len
 
-                import pdb; pdb.set_trace()
                 if self.shoot_ray(eye_point, ray_dir, max_ray_len):
                     visible[r, c] = 1.0
                 else:
