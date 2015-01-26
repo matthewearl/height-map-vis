@@ -94,7 +94,7 @@ def _plane_ray_intersect(plane, ray_origin, ray_dir, max_ray_len=None):
 
 def _point_infront_of_plane(plane, point):
     n, d = plane
-    return (n.T * point)[0, 0] > d
+    return (n.T * point)[0, 0] >= d
 
     
 def _convex_polyhedron_ray_intersect(planes,
@@ -276,8 +276,10 @@ def test_quadtree():
 
 def test_visibility():
     d = numpy.zeros((64, 64))
-    d[25:33, 25:33] = numpy.ones((8, 8))
-    eye_point = numpy.matrix([[32.5, 32.5, 2.0]]).T
+    d[20:28, 25:33] = numpy.ones((8, 8))
+    d[36:44, 25:33] = .5 * numpy.ones((8, 8))
+    d[11:19, 18:22] = .5 * numpy.ones((8, 4))
+    eye_point = numpy.matrix([[40.5, 32.5, 2.0]]).T
     
     height_map = HeightMap(d) 
 
@@ -287,8 +289,8 @@ def test_visibility():
                 return ' '
             else:
                 return '{}'.format(e)[0]
-        for c in xrange(m.shape[1]):
-            print ''.join(el_to_char(m[r, c]) for r in xrange(m.shape[0]))
+        for r in xrange(m.shape[0]):
+            print ''.join(el_to_char(m[r, c]) for c in xrange(m.shape[1]))
 
     print_mat(d)
 
