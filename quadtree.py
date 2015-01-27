@@ -245,7 +245,8 @@ class HeightMap(QuadTree):
                 
                 ray_dir = (ray_end - eye_point)
                 max_ray_len = math.sqrt(ray_dir[0, 0] ** 2 +
-                                        ray_dir[1, 0] ** 2)
+                                        ray_dir[1, 0] ** 2 +
+                                        ray_dir[2, 0] ** 2)
                 ray_dir /= max_ray_len
 
                 if self.shoot_ray(eye_point, ray_dir, max_ray_len):
