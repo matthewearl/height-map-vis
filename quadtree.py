@@ -97,7 +97,11 @@ def _plane_ray_intersect(plane, ray_origin, ray_dir, max_ray_len=None):
         return None
 
     # Otherwise, project the ray.
-    poi = ray_origin + ray_len * ray_dir
+    poi = [
+        ray_origin[0] + ray_len * ray_dir[0],
+        ray_origin[1] + ray_len * ray_dir[1],
+        ray_origin[2] + ray_len * ray_dir[2],
+    ]
 
     return poi
 
@@ -196,7 +200,8 @@ class HeightMap(QuadTree):
         If a point is not in this box, then it is not within the volume.
 
         """
-        return ( numpy.array([[self.mins[1], self.mins[0], 0.0]]).T,
+        return ( numpy.array([[self.mins[1], self.mins[0],
+                               self.MIN_HEIGHT]]).T,
                  numpy.array([[self.maxs[1], self.maxs[0], self.max_val]]).T
                )
 
@@ -207,7 +212,8 @@ class HeightMap(QuadTree):
         If a point is in this box, then it is within the volume.
 
         """
-        return ( numpy.array([[self.mins[1], self.mins[0], 0.0]]).T,
+        return ( numpy.array([[self.mins[1], self.mins[0],
+                               self.MIN_HEIGHT]]).T,
                  numpy.array([[self.maxs[1], self.maxs[0], self.min_val]]).T
                )
 
