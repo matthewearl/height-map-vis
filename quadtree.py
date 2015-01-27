@@ -1,6 +1,4 @@
 import math
-import numpypy
-import numpy
 import random
 
 __all__ = (
@@ -11,6 +9,24 @@ __all__ = (
 rays_shot = 0
 import collections
 stats = collections.defaultdict(int)
+
+
+USE_PYPY = True
+USE_C_QUADTREE = False
+TEST_C_QUADTREE = False
+PROFILER = False
+
+
+if TEST_C_QUADTREE:
+    assert USE_C_QUADTREE
+
+if USE_PYPY:
+    import numpypy
+import numpy
+
+if USE_C_QUADTREE:
+    import _quadtree
+
 
 class QuadTree(object):
     """
@@ -137,7 +153,7 @@ def _convex_polyhedron_ray_intersect(planes,
             if not _point_infront_of_plane(p, poi):
                 break
         else:
-            # Loop comoleted
+            # Loop completed
             return True
 
     return False
@@ -160,19 +176,40 @@ def _aa_box_ray_intersect(box,
 
     """
     box_mins, box_maxs = box
-    ray_origin = list(ray_origin.flatten())
-    ray_dir = list(ray_dir.flatten())
+    
+    ray_origin = (float(ray_origin[0, 0]),
+                  float(ray_origin[1, 0]),
+                  float(ray_origin[2, 0]))
+    ray_dir = (float(ray_dir[0, 0]),
+               float(ray_dir[1, 0]),
+               float(ray_dir[2, 0]))
     planes = [
-        ([1.0,0.0,0.0], box_mins[0, 0]),
-        ([-1.0,0.0,0.0], -box_maxs[0, 0]),
-        ([0.0,1.0,0.0], box_mins[1, 0]),
-        ([0.0,-1.0,0.0], -box_maxs[1, 0]),
-        ([0.0,0.0,1.0], box_mins[2, 0]),
-        ([0.0,0.0,-1.0], -box_maxs[2, 0]),
+        ((1.0,0.0,0.0), float(box_mins[0, 0])),
+        ((-1.0,0.0,0.0), -float(box_maxs[0, 0])),
+        ((0.0,1.0,0.0), float(box_mins[1, 0])),
+        ((0.0,-1.0,0.0), -float(box_maxs[1, 0])),
+        ((0.0,0.0,1.0), float(box_mins[2, 0])),
+        ((0.0,0.0,-1.0), -float(box_maxs[2, 0])),
     ]
 
-    return _convex_polyhedron_ray_intersect(planes, ray_origin, ray_dir,
-                                            max_ray_len)
+    def get_py_res():
+        return _convex_polyhedron_ray_intersect(planes, ray_origin, ray_dir,
+                                                max_ray_len)
+
+    def get_c_res():
+        return _quadtree.convex_polyhedron_ray_intersect(planes, ray_origin,
+                                                         ray_dir, max_ray_len)
+        
+    if USE_C_QUADTREE:
+        res = get_c_res()
+        if TEST_C_QUADTREE:
+            py_res = get_py_res()
+            assert py_res == res
+    else:
+        res = get_py_res()
+
+    return res
+
 
 class HeightMap(QuadTree):
     """
@@ -343,9 +380,11 @@ def test_visibility():
 
 if __name__ == "__main__":
     #test_quadtree()
-    #import cProfile
-    #cProfile.run('test_visibility()', sort='time')
-    test_visibility()
+    if PROFILER:
+        import cProfile
+        cProfile.run('test_visibility()', sort='time')
+    else:
+        test_visibility()
 
     print repr(stats)
     print stats
