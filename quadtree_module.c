@@ -45,11 +45,11 @@ _quadtree_point_infront_of_plane_obj(PyObject *plane, PyObject *point)
     PyObject *normal;
     double     d;
 
-    if (PyArg_ParseTuple("Od", &normal, &d)) {
+    if (PyArg_ParseTuple(plane, "Od", &normal, &d)) {
         assert(0);
     }
 
-    return _quadtree_dot_product_obj_obj(normal, point) >= d
+    return _quadtree_dot_product_obj_obj(normal, point) >= d;
 }
 
 
@@ -59,15 +59,15 @@ _quadtree_point_infront_of_plane_arr(PyObject *plane, double *arr)
     PyObject *normal;
     double     d;
 
-    if (PyArg_ParseTuple("Od", &normal, &d)) {
+    if (PyArg_ParseTuple(plane, "Od", &normal, &d)) {
         assert(0);
     }
 
-    return _quadtree_dot_product_obj_arr(normal, arr) >= d
+    return _quadtree_dot_product_obj_arr(normal, arr) >= d;
 }
 
 
-static void
+static int
 _quadtree_plane_ray_intersect(PyObject *plane,
                               PyObject *ray_origin,
                               PyObject *ray_dir,
@@ -81,7 +81,7 @@ _quadtree_plane_ray_intersect(PyObject *plane,
     double    ray_len;
     int       i;
 
-    if (PyArg_ParseTuple("Od", &normal, &distance)) {
+    if (PyArg_ParseTuple(plane, "Od", &normal, &distance)) {
         assert(0);
     }
 
@@ -89,22 +89,25 @@ _quadtree_plane_ray_intersect(PyObject *plane,
     dir_dot = _quadtree_dot_product_obj_obj(normal, ray_dir);
 
     if (dir_dot == 0.0) {
-        Py_RETURN_NONE;
+        return 0;
     }
 
-    ray_len = (distance - origin_dot) / dir_dot
+    ray_len = (distance - origin_dot) / dir_dot;
+
     if (ray_len < 0.0) {
-        Py_RETURN_NONE;
+        return 0;
     }
 
     if (ray_len > max_ray_len) {
-        Py_RETURN_NONE;
+        return 0;
     }
    
     for (i = 0; i < 3; i++) {
         poi[i] = PyFloat_AS_DOUBLE(PyTuple_GET_ITEM(ray_origin, i)) +
                 ray_len * PyFloat_AS_DOUBLE(PyTuple_GET_ITEM(ray_dir, i));
     }
+
+    return 1;
 }
 
 
@@ -120,7 +123,8 @@ _quadtree_convex_polyhedron_ray_intersect(PyObject *self, PyObject *args)
     Py_ssize_t       i, j;
     double           poi[3];
 
-    if (!PyArg_ParseTuple("OOOd",
+    if (!PyArg_ParseTuple(args,
+                          "OOOd",
                           &planes,
                           &ray_origin,
                           &ray_dir,
@@ -143,11 +147,13 @@ _quadtree_convex_polyhedron_ray_intersect(PyObject *self, PyObject *args)
     /* Otherwise, work out whether the ray intersects with the volume. */
     for (i = 0; i < PyList_GET_SIZE(planes); i++) {
         plane = PyList_GET_ITEM(planes, i);
-        _quadtree_plane_ray_intersect(plane,
-                                      ray_origin,
-                                      ray_dir,
-                                      max_ray_len,
-                                      poi);
+        if (_quadtree_plane_ray_intersect(plane,
+                                          ray_origin,
+                                          ray_dir,
+                                          max_ray_len,
+                                          poi)) {
+            continue;
+        }
 
         /* Check that the POI is infront of all the other planes. */
         for (j = 0; j < PyList_GET_SIZE(planes); j++) {
