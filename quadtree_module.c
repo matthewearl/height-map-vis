@@ -3,7 +3,7 @@
 
 
 static double
-_quadtree_dot_product_obj_obj(PyObject *v1, PyObject *v2)
+_quadtree_dot_product_obj_obj (PyObject *v1, PyObject *v2)
 {
     Py_ssize_t  i;
     double      out;
@@ -22,7 +22,7 @@ _quadtree_dot_product_obj_obj(PyObject *v1, PyObject *v2)
 
 
 static double
-_quadtree_dot_product_obj_arr(PyObject *v1, double *arr)
+_quadtree_dot_product_obj_arr (PyObject *v1, double *arr)
 {
     Py_ssize_t  i;
     double      out;
@@ -40,7 +40,7 @@ _quadtree_dot_product_obj_arr(PyObject *v1, double *arr)
 
 
 static int
-_quadtree_point_infront_of_plane_obj(PyObject *plane, PyObject *point)
+_quadtree_point_infront_of_plane_obj (PyObject *plane, PyObject *point)
 {
     PyObject *normal;
     double     d;
@@ -54,7 +54,7 @@ _quadtree_point_infront_of_plane_obj(PyObject *plane, PyObject *point)
 
 
 static int
-_quadtree_point_infront_of_plane_arr(PyObject *plane, double *arr)
+_quadtree_point_infront_of_plane_arr (PyObject *plane, double *arr)
 {
     PyObject *normal;
     double     d;
@@ -68,11 +68,11 @@ _quadtree_point_infront_of_plane_arr(PyObject *plane, double *arr)
 
 
 static int
-_quadtree_plane_ray_intersect(PyObject *plane,
-                              PyObject *ray_origin,
-                              PyObject *ray_dir,
-                              double    max_ray_len,
-                              double   *poi)
+_quadtree_plane_ray_intersect (PyObject *plane,
+                               PyObject *ray_origin,
+                               PyObject *ray_dir,
+                               double    max_ray_len,
+                               double   *poi)
 {
     PyObject *normal;
     double    distance;
@@ -112,7 +112,7 @@ _quadtree_plane_ray_intersect(PyObject *plane,
 
 
 static PyObject *
-_quadtree_convex_polyhedron_ray_intersect(PyObject *self, PyObject *args)
+_quadtree_convex_polyhedron_ray_intersect (PyObject *self, PyObject *args)
 {
     PyObject        *planes;
     PyObject        *plane;
@@ -172,4 +172,23 @@ _quadtree_convex_polyhedron_ray_intersect(PyObject *self, PyObject *args)
     
     Py_RETURN_FALSE;
 }
-                        
+
+
+static PyMethodDef quadtree_methods[] = {
+  { "convex_polyhedron_ray_intersect",
+                     _quadtree_convex_polyhedron_ray_intersect, METH_VARARGS },
+  { NULL, NULL },
+};
+
+
+PyMODINIT_FUNC
+init_quadtree (void)
+{
+    PyObject *m;
+
+    m = Py_InitModule("_quadtree", quadtree_methods);
+    if (m == NULL)
+        return;
+
+}
+ 
