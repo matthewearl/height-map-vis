@@ -80,49 +80,46 @@ class _SphereMapping(object):
 
     def gen_height_map(self, sphere_radius):
         """
-        Get a height map with representing curvature over the region.
+        Get a height map representing curvature over the region.
 
         """
-        # Obtain some useful values used in the calculations below. Angles are
-        # converted to radians for use with trig functions.
-        centre_coords = (self.image_size[1] // 2,
-                         self.image_size[0] // 2)
-        centre_long_lat = pixel_to_long_lat((centre_coords[1],
-                                             centre_coords[0]))
-        centre_long_lat = tuple(x * math.pi / 180. for x in centre_long_lat)
-        tl_long_lat = tuple(x * math.pi / 180. for x in self.top_left_long_lat)
 
-        # Generate an array which represents angular distance from the line of
-        # longitude that runs through the centre of the image.
-        #
-        # In actuality this will vary across rows, but for small areas away
-        # from the poles duplicating rows is accurate enough.
-        x_offs = numpy.repeat(numpy.array([numpy.arange(self.image_dims[0])]),
+        # Obtain an array of pixels' longitudes.
+        longs = numpy.repeat(numpy.array([numpy.arange(self.image_dims[0])]),
                               self.image_dims[1],
                               axis=0)
-        x_offs -= x_offs[centre_coords] * numpy.ones(x_offs.shape) 
-        x_offs *= 2. * (centre_long_lat[0] - tl_long_lat[0]) / (
-                    math.cos(centre_long_lat[1]) * x_offs[centre_coords[0], 0])
+        longs *= self.pixel_scale[0]
+        longs += top_left_long_lat[0]
 
-        # Similarly generate an array which represents angular distance from
-        # the line of latitude that runs through the centre of the image.
-        y_offs = numpy.repeat(numpy.array([numpy.arange(self.image_dims[1])]),
+        # Also latitudes.
+        lats = numpy.repeat(numpy.array([numpy.arange(self.image_dims[1])]),
                               self.image_dims[0],
                               axis=0).T
-        y_offs -= y_offs[centre_coords] * numpy.ones(y_offs.shape) 
-        y_offs *= 2. * (centre_long_lat[1] - tl_long_lat[1]) / (
-                                                y_offs[0, centre_coords[1]])
-        
-        # From the `x_offs` and `y_offs` obtain an angular distance map from
-        # the centre of the image. Use the euclidean norm to approximate this.
-        dist_map = numpy.lingalg.norm(numpy.array([x_offs, y_offs]), axis=0)
+        lats *= self.pixel_scale[1]
+        lats += top_left_long_lat[1]
 
-        # With the angular distance map, take the cosine to determine the
-        # required height map.
-        height_map = sphere_radius * (numpy.cos(dist_map) -
-                                                    numpy.ones(dist_map.shape))
+        # Combine the two. For a coordinate (x, y), long_lats[:, y, x] should
+        # equal array(self.pixel_to_long_lat((x, y)).
+        long_lats = numpy.array([longs, lats])
+        import pdb; pdb.set_trace()
+
+        # Plug these values into the spherical law of cosines to obtain the
+        # cosine of the angle from the point in the centre of the image. (For
+        # the purposes of these comments refer to the angle as theta.)
+        centre_coords = (self.image_size[1] // 2,
+                         self.image_size[0] // 2)
+        lat_diffs = long_lats[1] - long_lats[1][centre_coords]
+        cos_angles = (numpy.sin(long_lats[1][centre_coords]) *
+                            numpy.sin(long_lats[1, :, :]) +
+                      numpy.cos(long_lats[1][centre_coords) *
+                            numpy.cos(long_lats[1, :, :]) *
+                            numpy.cos(lat_diffs))
+
+        # The height map is then r * (cos(theta) - 1).
+        height_map = sphere_radius * (cos_angles - 1.)
 
         return height_map
+
         
 def _parse_eye_coords(s):
     out = tuple(float(x) for x in s.split())
