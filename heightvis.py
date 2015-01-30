@@ -4,6 +4,8 @@ import libtiff
 import numpy
 import sys
 
+import quadtree
+
 
 # Radius of the earth in metres (if the earth is modelled as sphere).
 EARTH_RADIUS = 6371000
@@ -45,12 +47,10 @@ class _SphereMapping(object):
                         world_file.top_left_latitude),
                    image_dims)
 
-
     def __init__(self, pixel_size, top_left_long_lat, image_dims):
         self.pixel_size = pixel_size
         self.top_left_long_lat = top_left_long_lat
         self.image_dims = image_dims
-
 
     def pixel_to_long_lat(self, pix):
         """
@@ -59,6 +59,14 @@ class _SphereMapping(object):
         """
         return tuple(self.top_left_long_lat[i] + pix[i] * self.pixel_size[i]
                                                                for i in (0, 1))
+
+    def long_lat_to_pixel(self, long_lat):
+        """
+        Return a x,y pixel coordinate pair for a given long,lat pair.
+
+        """
+        return tuple((long_lat[i] - self.top_left_long_lat[i]) /
+                            self.pixel_size[i] for i in (0, 1))
 
     def __getitem__(self, k):
         """
@@ -132,7 +140,7 @@ class _SphereMapping(object):
 def _parse_eye_coords(s):
     out = tuple(float(x) for x in s.split())
 
-    if len(out) != 2:
+    if len(out) != 3:
         raise Exception("Invalid eye-coords argument {!r}".format(s))
 
     return out
@@ -151,25 +159,37 @@ def main():
                         help='Space separated latitude, longitude and height '
                         'in metres, all in decimal format. Specifies the '
                         'viewpoint',
-                       required=False) 
+                       required=True) 
 
     args = parser.parse_args()
     world_file = _parse_esri_world_file(args.world_file)
 
-    #im = _load_height_data(args.input_file)
+    print "Loading tiff"
+    im = _load_height_data(args.input_file)
     sphere_mapping = _SphereMapping.from_world_file(world_file,
-                                                    (100,100))
-                                                    #(im.shape[1],
-                                                    # im.shape[0]))
-    im = sphere_mapping.gen_height_map(EARTH_RADIUS)
-    #im = im[3200:5200:2, -2000::2]
-    #im = numpy.maximum(-10. * numpy.ones(im.shape), im)
+                                                    (im.shape[1],
+                                                     im.shape[0]))
+    im = im[3200:5200:5, -2000::5]
+    im = numpy.maximum(-10. * numpy.ones(im.shape), im)
 
-    #sphere_mapping = sphere_mapping[3200:5200:2, -2000::2]
+    print "Offsetting heightmap due to earth curvature"
+    sphere_mapping = sphere_mapping[3200:5200:5, -2000::5]
+    im += sphere_mapping.gen_height_map(EARTH_RADIUS)
+
+    print "Building quad tree"
+    height_map = quadtree.HeightMap(im)
+
+    print "Calculating visibility"
+    eye_arg = _parse_eye_coords(args.eye_coords)
+    eye_pixel = sphere_mapping.long_lat_to_pixel(
+                    (eye_arg[1], eye_arg[0]))
+    eye_point = numpy.array([list(eye_pixel) + [eye_arg[2]]]).T
+    import pdb; pdb.set_trace()
+    visible = height_map.get_visible(eye_point)
 
     from matplotlib import pyplot as plt
     #plt.ion()
-    p = plt.imshow(im, interpolation='nearest')
+    p = plt.imshow(im + 50. * visible, interpolation='nearest')
     #p.write_png("foo.png")
     plt.show()
 

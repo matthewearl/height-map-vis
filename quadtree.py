@@ -2,6 +2,7 @@ import math
 import random
 
 __all__ = (
+    'HeightMap',
     'QuadTree',
     'print_quadtree',
 )
@@ -11,8 +12,8 @@ import collections
 stats = collections.defaultdict(int)
 
 
-USE_PYPY = True
-USE_C_QUADTREE = False
+USE_PYPY = False
+USE_C_QUADTREE = True
 TEST_C_QUADTREE = False
 PROFILER = False
 
@@ -224,10 +225,11 @@ class HeightMap(QuadTree):
     # The z-position of the lower bounds of the volume represented by the
     # height map. (The upper bounds are defined by the height map data, and the
     # side bounds are defined by the input array dimensions.)
-    MIN_HEIGHT = -1.0
+    MIN_HEIGHT = -400.0
 
     def __init__(self, data, *args, **kwargs):
-        assert self.MIN_HEIGHT < numpy.min(data)
+        #self.MIN_HEIGHT = numpy.min(data) - 1.0
+        #assert self.MIN_HEIGHT < numpy.min(data)
         super(HeightMap, self).__init__(data, *args, **kwargs)
 
     def get_bounding_box(self):
