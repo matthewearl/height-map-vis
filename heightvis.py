@@ -175,11 +175,11 @@ def main():
     sphere_mapping = _SphereMapping.from_world_file(world_file,
                                                     (im.shape[1],
                                                      im.shape[0]))
-    im = im[3200:5200:5, -2000::5]
+    im = im[3200:5200:20, -2000::20]
     im = numpy.maximum(-10. * numpy.ones(im.shape), im)
 
     print "Offsetting heightmap due to earth curvature"
-    sphere_mapping = sphere_mapping[3200:5200:5, -2000::5]
+    sphere_mapping = sphere_mapping[3200:5200:20, -2000::20]
     im += sphere_mapping.gen_height_map(EARTH_RADIUS)
 
     print "Building quad tree"
