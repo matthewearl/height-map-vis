@@ -57,6 +57,8 @@ class _SphereMapping(object):
         Return a long,lat pair for a given x,y pixel coordinate pair.
 
         """
+        pix = tuple((self.image_dims[i] - pix[i] if pix[i] < 0 else pix[i])
+                                                               for i in (0, 1))
         return tuple(self.top_left_long_lat[i] + pix[i] * self.pixel_size[i]
                                                                for i in (0, 1))
 
@@ -175,11 +177,11 @@ def main():
     sphere_mapping = _SphereMapping.from_world_file(world_file,
                                                     (im.shape[1],
                                                      im.shape[0]))
-    im = im[3200:5200:20, -2000::20]
+    im = im[3200:5200:2, -2000::2]
     im = numpy.maximum(-10. * numpy.ones(im.shape), im)
 
     print "Offsetting heightmap due to earth curvature"
-    sphere_mapping = sphere_mapping[3200:5200:20, -2000::20]
+    sphere_mapping = sphere_mapping[3200:5200:2, -2000::2]
     im += sphere_mapping.gen_height_map(EARTH_RADIUS)
 
     print "Building quad tree"
@@ -189,14 +191,20 @@ def main():
     eye_arg = _parse_eye_coords(args.eye_coords)
     eye_pixel = sphere_mapping.long_lat_to_pixel(
                     (eye_arg[1], eye_arg[0]))
+    print "Eye is at {}".format(eye_pixel)
     eye_point = numpy.array([list(eye_pixel) + [eye_arg[2]]]).T
-    import pdb; pdb.set_trace()
     visible = height_map.get_visible(eye_point)
 
     from matplotlib import pyplot as plt
     #plt.ion()
-    p = plt.imshow(im * visible, interpolation='nearest')
-    #p.write_png("foo.png")
+    left_extent, top_extent = sphere_mapping.pixel_to_long_lat((0, 0))
+    right_extent, bottom_extent = sphere_mapping.pixel_to_long_lat((-1, -1))
+    p = plt.imshow(visible,
+                   interpolation='nearest',
+                   extent=(left_extent, right_extent,
+                           bottom_extent, top_extent))
+    #p.write_png("foo3.png")
+
     plt.show()
 
 if __name__ == '__main__':
