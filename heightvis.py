@@ -4,6 +4,10 @@ import libtiff
 import numpy
 import sys
 
+
+# Radius of the earth in metres (if the earth is modelled as sphere).
+EARTH_RADIUS = 6371000
+
 _EsriWorldFile = collections.namedtuple('_EsriWorldFile',
                                         ['x_pixel_size',
                                          'y_rotation',
@@ -85,42 +89,46 @@ class _SphereMapping(object):
         """
 
         # Obtain an array of pixels' longitudes.
-        longs = numpy.repeat(numpy.array([numpy.arange(self.image_dims[0])]),
+        longs = numpy.repeat(numpy.array([numpy.arange(self.image_dims[0],
+                                                        dtype=numpy.float64)]),
                               self.image_dims[1],
                               axis=0)
-        longs *= self.pixel_scale[0]
-        longs += top_left_long_lat[0]
+        longs *= self.pixel_size[0]
+        longs += self.top_left_long_lat[0]
 
         # Also latitudes.
-        lats = numpy.repeat(numpy.array([numpy.arange(self.image_dims[1])]),
+        lats = numpy.repeat(numpy.array([numpy.arange(self.image_dims[1],
+                                                        dtype=numpy.float64)]),
                               self.image_dims[0],
                               axis=0).T
-        lats *= self.pixel_scale[1]
-        lats += top_left_long_lat[1]
+        lats *= self.pixel_size[1]
+        lats += self.top_left_long_lat[1]
 
         # Combine the two. For a coordinate (x, y), long_lats[:, y, x] should
         # equal array(self.pixel_to_long_lat((x, y)).
         long_lats = numpy.array([longs, lats])
-        import pdb; pdb.set_trace()
+
+        # Convert to radians...
+        long_lats *= numpy.pi / 180.
 
         # Plug these values into the spherical law of cosines to obtain the
         # cosine of the angle from the point in the centre of the image. (For
         # the purposes of these comments refer to the angle as theta.)
-        centre_coords = (self.image_size[1] // 2,
-                         self.image_size[0] // 2)
-        lat_diffs = long_lats[1] - long_lats[1][centre_coords]
+        centre_coords = (self.image_dims[1] // 2,
+                         self.image_dims[0] // 2)
+        long_diffs = long_lats[0] - long_lats[0][centre_coords]
         cos_angles = (numpy.sin(long_lats[1][centre_coords]) *
                             numpy.sin(long_lats[1, :, :]) +
-                      numpy.cos(long_lats[1][centre_coords) *
+                      numpy.cos(long_lats[1][centre_coords]) *
                             numpy.cos(long_lats[1, :, :]) *
-                            numpy.cos(lat_diffs))
+                            numpy.cos(long_diffs))
 
         # The height map is then r * (cos(theta) - 1).
-        height_map = sphere_radius * (cos_angles - 1.)
+        height_map = numpy.array(sphere_radius * (cos_angles - 1.),
+                           dtype=numpy.float32)
 
         return height_map
 
-        
 def _parse_eye_coords(s):
     out = tuple(float(x) for x in s.split())
 
@@ -147,20 +155,22 @@ def main():
 
     args = parser.parse_args()
     world_file = _parse_esri_world_file(args.world_file)
-    im = _load_height_data(args.input_file)
 
+    #im = _load_height_data(args.input_file)
     sphere_mapping = _SphereMapping.from_world_file(world_file,
-                                                    (im.shape[1],
-                                                     im.shape[0]))
-    im = im[3200:5200:2, -2000::2]
-    im = numpy.maximum(-10. * numpy.ones(im.shape), im)
+                                                    (100,100))
+                                                    #(im.shape[1],
+                                                    # im.shape[0]))
+    im = sphere_mapping.gen_height_map(EARTH_RADIUS)
+    #im = im[3200:5200:2, -2000::2]
+    #im = numpy.maximum(-10. * numpy.ones(im.shape), im)
 
     #sphere_mapping = sphere_mapping[3200:5200:2, -2000::2]
 
     from matplotlib import pyplot as plt
-    plt.ion()
+    #plt.ion()
     p = plt.imshow(im, interpolation='nearest')
-    p.write_png("foo.png")
+    #p.write_png("foo.png")
     plt.show()
 
 if __name__ == '__main__':
