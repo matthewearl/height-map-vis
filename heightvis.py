@@ -73,11 +73,17 @@ class _SphereMapping(object):
         Return a new _SphereMapping as if the input array had been thus
         subscripted.
 
+        The subscript is a pair consisting of slices and/or integers. The first
+        item refers to the Y axis, and the second item refers to the X axis.
+        This is for consistency with array subscripts.
+        
         """
         assert len(k) == 2
 
+        k = (k[1], k[0])
+
         # Make sure the subscript is a slice
-        k = tuple((slice(n, n+1, None) if not isinstance(n, slice) else n)
+        k = tuple((slice(n, n + 1, None) if not isinstance(n, slice) else n)
                                                                     for n in k)
 
         stride = tuple(k[i].indices(self.image_dims[i])[2] for i in (0, 1))
@@ -189,7 +195,7 @@ def main():
 
     from matplotlib import pyplot as plt
     #plt.ion()
-    p = plt.imshow(im + 50. * visible, interpolation='nearest')
+    p = plt.imshow(im * visible, interpolation='nearest')
     #p.write_png("foo.png")
     plt.show()
 

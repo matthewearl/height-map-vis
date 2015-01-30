@@ -46,7 +46,7 @@ class QuadTree(object):
     """
 
     @classmethod
-    def make_child(cls, data, mins, maxs):
+    def make_child(cls, parent, data, mins, maxs):
         return cls(data, mins, maxs)
 
     def __init__(self, data, mins=None, maxs=None):
@@ -81,7 +81,7 @@ class QuadTree(object):
                 child_mins = [mins, (mins[0], mins[1] + shape[1] / 2)]
                 child_maxs = [(maxs[0], mins[1] + shape[1] / 2), maxs]
             self.children = [
-                            self.make_child(data, child_mins[i], child_maxs[i])
+                      self.make_child(self, data, child_mins[i], child_maxs[i])
                                     for i in (0, 1)]
             self.min_val = min(*(c.min_val for c in self.children))
             self.max_val = max(*(c.max_val for c in self.children))
@@ -222,14 +222,20 @@ class HeightMap(QuadTree):
     # to avoid the shadow ray intersecting with the section being tested.
     RAY_OFFSET = 0.1
     
-    # The z-position of the lower bounds of the volume represented by the
-    # height map. (The upper bounds are defined by the height map data, and the
-    # side bounds are defined by the input array dimensions.)
-    MIN_HEIGHT = -400.0
-
+    @classmethod
+    def make_child(cls, parent, data, mins, maxs):
+        return cls(data, mins, maxs, min_height=parent.min_height)
+        
     def __init__(self, data, *args, **kwargs):
-        #self.MIN_HEIGHT = numpy.min(data) - 1.0
-        #assert self.MIN_HEIGHT < numpy.min(data)
+        # Calculate the z-position of the lower bounds of the volume
+        # represented by the height map. (The upper bounds are defined by the
+        # height map data, and the side bounds are defined by the input array
+        # dimensions.)
+        if 'min_height' not in kwargs:
+            self.min_height = numpy.min(data) - 1.0
+        else:
+            self.min_height = kwargs['min_height']
+            del kwargs['min_height']
         super(HeightMap, self).__init__(data, *args, **kwargs)
 
     def get_bounding_box(self):
@@ -240,7 +246,7 @@ class HeightMap(QuadTree):
 
         """
         return ( numpy.array([[self.mins[1], self.mins[0],
-                               self.MIN_HEIGHT]]).T,
+                               self.min_height]]).T,
                  numpy.array([[self.maxs[1], self.maxs[0], self.max_val]]).T
                )
 
@@ -252,7 +258,7 @@ class HeightMap(QuadTree):
 
         """
         return ( numpy.array([[self.mins[1], self.mins[0],
-                               self.MIN_HEIGHT]]).T,
+                               self.min_height]]).T,
                  numpy.array([[self.maxs[1], self.maxs[0], self.min_val]]).T
                )
 
