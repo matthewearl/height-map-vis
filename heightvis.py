@@ -1,6 +1,7 @@
 import argparse
 import collections
 import libtiff
+import math
 import numpy
 import sys
 
@@ -153,6 +154,56 @@ def _parse_eye_coords(s):
 
     return out
 
+def _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point):
+    from matplotlib import pyplot as plt
+    left_extent, top_extent = sphere_mapping.pixel_to_long_lat((0, 0))
+    right_extent, bottom_extent = sphere_mapping.pixel_to_long_lat((-1, -1))
+
+    fig = plt.figure()
+    visible_ax = fig.add_subplot(121)
+    visible_ax.imshow(visible,
+                      interpolation='nearest',
+                      extent=(left_extent, right_extent,
+                              bottom_extent, top_extent))
+
+    x = numpy.arange(0., 1., 0.001)
+    y = numpy.array([math.sin(200. * math.pi * i) for i in x])
+    profile_ax = fig.add_subplot(122)
+    profile_ax.plot(x, y)
+
+    def update_profile(long_lat):
+        start_x, start_y = map(float,
+                               sphere_mapping.long_lat_to_pixel(long_lat))
+        end_x, end_y = eye_point[0, 0], eye_point[1, 0]
+
+        x_data = numpy.arange(0.0, 1.0, 0.001)
+        height_y_data = []
+        curve_y_data = []
+        for k in x_data:
+            x = int((1. - k) * start_x + k * end_x)
+            y = int((1. - k) * start_y + k * end_y)
+            height_y_data.append(height_im[y, x])
+            curve_y_data.append(curve_im[y, x])
+
+        profile_ax.clear()
+        profile_ax.plot(x_data, numpy.array(height_y_data))
+        profile_ax.plot(x_data, numpy.array(curve_y_data))
+
+        x_data = numpy.array([0., 1.])
+        y_data = numpy.array([height_y_data[0], eye_point[2, 0]])
+        profile_ax.plot(x_data, y_data)
+
+        fig.canvas.draw()
+        
+    def onclick(event):
+        print 'button=%d, x=%d, y=%d, xdata=%f, ydata=%f'%(
+                    event.button, event.x, event.y, event.xdata, event.ydata)
+        if event.inaxes == visible_ax:
+            update_profile((event.xdata, event.ydata))
+    cid = fig.canvas.mpl_connect('button_press_event', onclick)
+
+    plt.show()
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -173,39 +224,32 @@ def main():
     world_file = _parse_esri_world_file(args.world_file)
 
     print "Loading tiff"
-    im = _load_height_data(args.input_file)
+    height_im = _load_height_data(args.input_file)
     sphere_mapping = _SphereMapping.from_world_file(world_file,
-                                                    (im.shape[1],
-                                                     im.shape[0]))
-    im = im[3200:5200:2, -2000::2]
-    im = numpy.maximum(-10. * numpy.ones(im.shape), im)
+                                                    (height_im.shape[1],
+                                                     height_im.shape[0]))
+    height_im = height_im[3200:5200:20, -2000::20]
+    height_im = numpy.maximum(-10. * numpy.ones(height_im.shape), height_im)
 
     print "Offsetting heightmap due to earth curvature"
-    sphere_mapping = sphere_mapping[3200:5200:2, -2000::2]
-    im += sphere_mapping.gen_height_map(EARTH_RADIUS)
+    sphere_mapping = sphere_mapping[3200:5200:20, -2000::20]
+    curve_im = sphere_mapping.gen_height_map(EARTH_RADIUS)
+    height_im += curve_im
 
     print "Building quad tree"
-    height_map = quadtree.HeightMap(im)
+    height_map = quadtree.HeightMap(height_im)
 
     print "Calculating visibility"
     eye_arg = _parse_eye_coords(args.eye_coords)
     eye_pixel = sphere_mapping.long_lat_to_pixel(
                     (eye_arg[1], eye_arg[0]))
+    eye_height = height_im[int(eye_pixel[1]),
+                           int(eye_pixel[0])] + eye_arg[2]
     print "Eye is at {}".format(eye_pixel)
-    eye_point = numpy.array([list(eye_pixel) + [eye_arg[2]]]).T
+    eye_point = numpy.array([list(eye_pixel) + [eye_height]]).T
     visible = height_map.get_visible(eye_point)
 
-    from matplotlib import pyplot as plt
-    #plt.ion()
-    left_extent, top_extent = sphere_mapping.pixel_to_long_lat((0, 0))
-    right_extent, bottom_extent = sphere_mapping.pixel_to_long_lat((-1, -1))
-    p = plt.imshow(visible,
-                   interpolation='nearest',
-                   extent=(left_extent, right_extent,
-                           bottom_extent, top_extent))
-    #p.write_png("foo3.png")
-
-    plt.show()
+    _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point)
 
 if __name__ == '__main__':
     main()
