@@ -130,15 +130,11 @@ def _osgb36_long_lat_to_os_grid(long_lat):
     e2 = 1. - (b * b)/(a * a)
     n = (a - b)/(a + b)
 
-    # nu = transverse radius of curvature
-    # rho = meridional radius of curvature
-    # eta = ?
     nu = a * F0 / (1. - e2 * math.sin(lat)**2.)**0.5
     rho = (a * F0 * (1. - e2) *
                 (1. - e2 * math.sin(lat)**2)**-1.5)
     eta2 = nu / rho - 1.
 
-    # Calculate M, the meridian distance.
     M1 = (1. + n + (5. / 4) * n**2 + (5. / 4) * n**3) * (lat - origin_lat)
     M2 = ((3. * n + 3. * n**2 + (21. / 8) * n**3) *
           math.sin(lat - origin_lat) *
@@ -151,7 +147,6 @@ def _osgb36_long_lat_to_os_grid(long_lat):
           math.cos(3. * (lat + origin_lat)))
     M = b * F0 * (M1 - M2 + M3 - M4)
 
-    # Apply the Redfearne
     I = M + N0
     II = (nu / 2.) * math.sin(lat) * math.cos(lat)
     III = ((nu / 24.) *
@@ -188,9 +183,6 @@ def _osgb36_long_lat_to_os_grid(long_lat):
 def _wgs84_long_lat_to_os_grid(long_lat):
     """
     Convert an WGS84 long/lat to OS grid northings/eastings.
-
-    This is the implementation described in Appendix C of `A guide to
-    coordinate systems in Great Britain`.
 
     long_lat: WGS84 longitude/latitude in radians.
 
