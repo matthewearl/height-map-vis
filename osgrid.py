@@ -26,7 +26,6 @@ def _cartesian_to_long_lat(v, a, b):
     systems in Great Britain`
 
     """
-
     x, y, z = numpy.array(v).flatten()
     e2 = 1. - a**2 / b**2
 
@@ -79,14 +78,18 @@ def _helmert_transform(long_lat,
     return long, lat
 
     
-def _gsr80_to_airy1830(long_lat):
+def _wgs84_to_osgb36(long_lat):
     """
-    Convert a long/lat on the GSR80 ellipsoid to a long/lat on the Airy1830
-    ellipsoid.
+    Convert a long/lat in WGS84 coordinates to a long/lat in OSGB36
+    coordinates.
 
     """
+    # Ellipsoid paramaters. OSGB36 uses the Airy 1830 ellipsoid, whereas WGS84
+    # uses the GSR80 ellipsoid.
     airy1830_a, airy1830_b = 6377563.396, 6356256.909
     gsr80_a, gsr80_b = 6378137.000, 6356752.3141
+
+    # Translation/scale/rotation parameters.
     cx, cy, cz = 446.448, 125.157, -542.06
     s = 20.4894
     rx, ry, rz = -0.1502, -0.247, -0.8421
@@ -97,19 +100,19 @@ def _gsr80_to_airy1830(long_lat):
                               cx, cy, cz, s, rx, ry, rz)
 
 
-def _airy1830_long_lat_to_os_grid(long_lat):
+def _osgb36_long_lat_to_os_grid(long_lat):
     """
-    Convert long/lat on an Airy 1830 ellipsoid to OS grid northings/eastings.
+    Convert an OSGB36 long/lat to OS grid northings/eastings.
 
     This is the implementation described in Appendix C of `A guide to
     coordinate systems in Great Britain`.
 
-    long_lat: longitude/latitude in radians.
+    long_lat: OSGB36 longitude/latitude in radians.
 
-    Returns: N, E.
+    Returns: (E, N), the eastings and northings in OS grid coordinates,
+        respectively.
 
     """
-    
     long, lat = long_lat
 
     # a, b = major & minor semi-axes
@@ -130,23 +133,23 @@ def _airy1830_long_lat_to_os_grid(long_lat):
     # nu = transverse radius of curvature
     # rho = meridional radius of curvature
     # eta = ?
-    nu = a * F0 / math.sqrt(1. - e2 * math.sin(lat)**2.)
-    rho = (a * F0 * (1. - e2) / 
-                        (1. - e2 * math.sin(lat) * math.sin(lat))**1.5)
-    eta2 = nu / rho - 1
+    nu = a * F0 / (1. - e2 * math.sin(lat)**2.)**0.5
+    rho = (a * F0 * (1. - e2) *
+                (1. - e2 * math.sin(lat)**2)**-1.5)
+    eta2 = nu / rho - 1.
 
     # Calculate M, the meridian distance.
-    Ma = (1. + n + (5. / 4) * n**2 + (5. / 4) * n**3) * (lat - origin_lat)
-    Mb = ((3. * n + 3. * n**2 + (21. / 8) * n**3) *
+    M1 = (1. + n + (5. / 4) * n**2 + (5. / 4) * n**3) * (lat - origin_lat)
+    M2 = ((3. * n + 3. * n**2 + (21. / 8) * n**3) *
           math.sin(lat - origin_lat) *
           math.cos(lat + origin_lat))
-    Mc = (((15. / 8) * n**2 + (15. / 8) * n**3) *
+    M3 = (((15. / 8) * n**2 + (15. / 8) * n**3) *
           math.sin(2. * (lat - origin_lat)) *
           math.cos(2. * (lat + origin_lat)))
-    Md = ((35. / 24) * n**3 *
+    M4 = ((35. / 24) * n**3 *
           math.sin(3. * (lat - origin_lat)) *
           math.cos(3. * (lat + origin_lat)))
-    M = b * F0 * (Ma - Mb + Mc - Md)
+    M = b * F0 * (M1 - M2 + M3 - M4)
 
     # Apply the Redfearne
     I = M + N0
@@ -170,15 +173,33 @@ def _airy1830_long_lat_to_os_grid(long_lat):
 
     delta_long = long - origin_long
 
-    N = I + II*(delta_long ** 2) + III*(delta_long ** 4) + IIIA*(delta_long**6)
-    E = E0 + IV*delta_long + V*(delta_long**3) + VI*(delta_long**5)
+    N = (I +
+         II * (delta_long ** 2) +
+         III*(delta_long ** 4) +
+         IIIA*(delta_long**6))
+    E = (E0 +
+         IV * delta_long +
+         V * (delta_long**3) +
+         VI * (delta_long**5))
 
     return E, N
 
 
 def _wgs84_long_lat_to_os_grid(long_lat):
-    long, lat = (x * math.pi / 180. for x in long_lat)
-    k
+    """
+    Convert an WGS84 long/lat to OS grid northings/eastings.
+
+    This is the implementation described in Appendix C of `A guide to
+    coordinate systems in Great Britain`.
+
+    long_lat: WGS84 longitude/latitude in radians.
+
+    Returns: (E, N), the eastings and northings in OS grid coordinates,
+        respectively.
+
+    """
+    osgb36_long_lat = _wgs84_to_osgb36(long_lat)
+    return _osgb36_long_lat_to_os_grid(osgb36_long_lat)
 
 
 def get_image_from_sphere_mapping(sphere_mapping):
