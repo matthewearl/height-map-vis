@@ -2,6 +2,25 @@ import math
 import numpy
 
 
+_OS_MAP_GRID_TILES = (
+    ( "HL", "HM", "HN", "HO", "HP", "JL", "JM" ),
+    ( "HQ", "HR", "HS", "HT", "HU", "JQ", "JR" ),
+    ( "HV", "HW", "HX", "HY", "HZ", "JV", "JW" ),
+    
+    ( "NA", "NB", "NC", "ND", "NE", "OA", "OB" ),
+    ( "NF", "NG", "NH", "NJ", "NK", "OF", "OG" ),
+    ( "NL", "NM", "NN", "NO", "NP", "OL", "OM" ),
+    ( "NQ", "NR", "NS", "NT", "NU", "OQ", "OR" ),
+    ( "NV", "NW", "NX", "NY", "NZ", "OV", "OW" ),
+    
+    ( "SA", "SB", "SC", "SD", "SE", "TA", "TB" ),
+    ( "SF", "SG", "SH", "SJ", "SK", "TF", "TG" ),
+    ( "SL", "SM", "SN", "SO", "SP", "TL", "TM" ),
+    ( "SQ", "SR", "SS", "ST", "SU", "TQ", "TR" ),
+    ( "SV", "SW", "SX", "SY", "SZ", "TV", "TW" ),
+)
+
+
 def _long_lat_to_cartesian(long_lat, a, b):
     """
     Convert long/lat to cartesian coordinates.
@@ -171,9 +190,9 @@ def _osgb36_long_lat_to_os_grid(long_lat):
     delta_long = long - origin_long
 
     N = (I +
-         II * (delta_long ** 2) +
-         III*(delta_long ** 4) +
-         IIIA*(delta_long**6))
+         II * (delta_long**2) +
+         III * (delta_long**4) +
+         IIIA * (delta_long**6))
     E = (E0 +
          IV * delta_long +
          V * (delta_long**3) +
@@ -196,5 +215,58 @@ def _wgs84_long_lat_to_os_grid(long_lat):
     return _osgb36_long_lat_to_os_grid(osgb36_long_lat)
 
 
-def get_image_from_wgs84_rect(min_long_lat, max_long_lat, image_dims):
-    pass
+def get_image_from_wgs84_rect(north_west_long_lat,
+                              south_east_long_lat, image_dims):
+    """
+    Map a portion of an OS map into an image, whose bounds are defined by
+    minimum and maximum latitudes and longitudes.
+
+    For example:
+      get_image_from_wgs84_rect((0, 55), (1, 54), (100, 100))
+
+    Will return a 100x100 pixel OS map where pixel (x, y) corresponds with
+    WGS84 longitude (x / 100) degrees and WGS84 latitude (55 - y / 100)
+    degrees.
+
+    """
+    north_west_long_lat = tuple(math.pi * x / 180. for x in
+                                                           north_west_long_lat)
+    south_east_long_lat = tuple(math.pi * x / 180. for x in
+                                                           south_east_long_lat)
+    
+    # Obtain the corners in OS grid coordinates.
+    os_grid_corners = (
+        _wgs84_long_lat_to_os_grid((north_west_long_lat[0],
+                                    north_west_long_lat[1])), # NW
+        _wgs84_long_lat_to_os_grid((south_east_long_lat[0],
+                                    north_west_long_lat[1])), # NE
+        _wgs84_long_lat_to_os_grid((north_west_long_lat[0],
+                                    south_east_long_lat[1])), # SW
+        _wgs84_long_lat_to_os_grid((south_east_long_lat[0],
+                                    south_east_long_lat[1])), # SE
+    )
+
+    # Calculate a set of OS grid tiles that will cover the mapped rectangle.
+    os_grid_mins = (min(E for E, N in os_grid_corners),
+                    min(N for E, N in os_grid_corners))
+    os_grid_maxs = (max(E for E, N in os_grid_corners),
+                    max(N for E, N in os_grid_corners))
+    west_tile_east_idx = os_grid_mins[0] // 100000
+    east_tile_east_idx = os_grid_maxs[0] // 100000
+    south_tile_north_idx = os_grid_mins[1] // 100000
+    north_tile_north_idx = os_grid_maxs[1] // 100000
+
+    # Pull in imagery for these tiles and combine into an image. The image is
+    # at origin 100000 * (south_tile_north_idx, west_tile_east_idx), in
+    # northings and eastings.
+    tile_rows = []
+    for north_idx in reversed(range(south_tile_north_idx,
+                                    north_tile_north_idx + 1)):
+        # Build up the tiles in this row
+        tiles = []
+        for east_idx in range(south_tile_east_idx, north_tile_east_idx + 1):
+            tile = _load_tile(_OS_MAP_GRID_TILES[-(1 + north_idx)][east_idx])
+            tiles.append(tile)
+        tile_rows.append(numpy.hstack(tiles))
+    combined_tiles = numpy.vstack(tile_rows)
+    
