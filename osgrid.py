@@ -10,7 +10,8 @@ def _long_lat_to_cartesian(long_lat, a, b):
     systems in Great Britain`
     
     """
-    e2 = 1. - a**2 / b**2
+    long, lat = long_lat
+    e2 = 1. - b**2 / a**2
     nu = a / math.sqrt(1. - e2 * math.sin(lat) ** 2)
     H = 0
     return numpy.matrix([(nu + H) * math.cos(lat) * math.cos(long),
@@ -27,8 +28,7 @@ def _cartesian_to_long_lat(v, a, b):
 
     """
     x, y, z = numpy.array(v).flatten()
-    e2 = 1. - a**2 / b**2
-
+    e2 = 1. - b**2 / a**2
     p = math.sqrt(x**2 + y**2)
     lat = math.atan2(z, p * (1. - e2))
     lat_prev = None
@@ -61,17 +61,19 @@ def _helmert_transform(long_lat,
     # Compute the point in cartesian space.
     v = _long_lat_to_cartesian((long, lat), from_a, from_b)
 
-    # Convert rotation parameters from arc-seconds into radians.
+    # Convert rotation parameters from arc-seconds into radians, and s from
+    # ppm.
     rx, ry, rz = (math.pi * r / (180. * 3600.) for r in (rx, ry, rz))
+    s *= 10**-6
 
     # Compute R, the rotation matrix, and the translation vector c.
-    R = numpy.matrix([[1.0,  -rz,  ry],
-                      [rz,   1.0, -rx],
-                      [-ry,   rx, 1.0]])
+    R = numpy.matrix([[1.0 + s,      -rz,      ry],
+                      [rz,       1.0 + s,     -rx],
+                      [-ry,           rx, 1.0 + s]])
     c = numpy.matrix([[cx, cy, cz]]).T
 
     # Transform v.
-    v = c + (1. + s * 10**-6) * R * v
+    v = c + R * v
     
     long, lat = _cartesian_to_long_lat(v, to_a, to_b)
 
@@ -90,7 +92,7 @@ def _wgs84_to_osgb36(long_lat):
     gsr80_a, gsr80_b = 6378137.000, 6356752.3141
 
     # Translation/scale/rotation parameters.
-    cx, cy, cz = 446.448, 125.157, -542.06
+    cx, cy, cz = -446.448, 125.157, -542.06
     s = 20.4894
     rx, ry, rz = -0.1502, -0.247, -0.8421
 
@@ -194,5 +196,5 @@ def _wgs84_long_lat_to_os_grid(long_lat):
     return _osgb36_long_lat_to_os_grid(osgb36_long_lat)
 
 
-def get_image_from_sphere_mapping(sphere_mapping):
+def get_image_from_wgs84_rect(min_long_lat, max_long_lat, image_dims):
     pass
