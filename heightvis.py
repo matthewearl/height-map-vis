@@ -8,6 +8,7 @@ import sys
 
 import quadtree
 
+from matplotlib import pyplot as plt
 
 # Radius of the earth in metres (if the earth is modelled as sphere).
 EARTH_RADIUS = 6371000
@@ -157,19 +158,28 @@ def _parse_eye_coords(s):
 
 def _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point,
                bgs=()):
-    from matplotlib import pyplot as plt
+    # Overhead visibility plot, including background data, if available. The
+    # visibility info is converted into RGBA with an alpha channel.
+    assert len(visible.shape) == 2, "visible should be a greyscale"
+    alpha = visible * 0.5
+    visible = numpy.array([numpy.zeros(visible.shape)] * 3 + [alpha])
+    visible = numpy.transpose(visible, (1, 2, 0))
     left_extent, top_extent = sphere_mapping.pixel_to_long_lat((0, 0))
     right_extent, bottom_extent = sphere_mapping.pixel_to_long_lat((-1, -1))
-
     fig = plt.figure()
     visible_ax = fig.add_subplot(121)
+    for bg in bgs:
+        visible_ax.imshow(bg.im, extent=bg.extent)
     visible_ax.imshow(visible,
                       interpolation='nearest',
                       extent=(left_extent, right_extent,
                               bottom_extent, top_extent))
-    for bg in bgs:
-        visible_ax.imshow(bg.im, extent=bg.extent)
 
+    # Dummy data for the profile plot. The profile plot is a side on view
+    # showing:
+    #   - The terrain (including earth curvature).
+    #   - Just earth curvature.
+    #   - Line of sight from the eye-point to a piece of terrain.
     x = numpy.arange(0., 1., 0.001)
     y = numpy.array([math.sin(200. * math.pi * i) for i in x])
     profile_ax = fig.add_subplot(122)
@@ -177,6 +187,10 @@ def _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point,
 
 
     def update_profile(long_lat):
+        """Update the profile plot."""
+        # Calculate the data for the height and earth curvature lines. Do this
+        # by taking 1000 samples on a line between the click location and the
+        # eye.
         start_x, start_y = map(float,
                                sphere_mapping.long_lat_to_pixel(long_lat))
         end_x, end_y = eye_point[0, 0], eye_point[1, 0]
@@ -194,12 +208,14 @@ def _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point,
         profile_ax.plot(x_data, numpy.array(height_y_data))
         profile_ax.plot(x_data, numpy.array(curve_y_data))
 
+        # Draw line-of-sight.
         x_data = numpy.array([0., 1.])
         y_data = numpy.array([height_y_data[0], eye_point[2, 0]])
         profile_ax.plot(x_data, y_data)
 
         fig.canvas.draw()
         
+    # Event handling glue.
     def onclick(event):
         print 'button=%d, x=%d, y=%d, xdata=%f, ydata=%f'%(
                     event.button, event.x, event.y, event.xdata, event.ydata)
@@ -236,8 +252,8 @@ def main():
         print "Loading OS map zip"
         tiled_os_map = osgrid.TiledOsMap(args.os_data)
         centre = (-0.35404, 51.818051)
-        size = (1.0, 1.0)
-        os_dims = (400, 400)
+        size = (0.5, 0.5)
+        os_dims = (1000, 1000)
         os_extent = (centre[0] - size[0]/2., centre[0] + size[0]/2.,
                      centre[1] - size[1]/2., centre[1] + size[1]/2.)
         os_im = tiled_os_map.get_image_from_wgs84_rect(
