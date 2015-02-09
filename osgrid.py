@@ -1,8 +1,10 @@
 import cv2
 import libtiff
 import math
+import matplotlib.image
 import numpy
 import os
+import StringIO
 import tempfile
 import zipfile
 
@@ -218,24 +220,15 @@ def _wgs84_long_lat_to_os_grid(long_lat):
     return _osgb36_long_lat_to_os_grid(osgb36_long_lat)
 
 
-def _load_tif_from_file_like(f):
+def _load_tif_from_non_seekable_file(f):
     """
-    Load a tif from a file-like object.
-
-    libtiff doesn't have native support for this so do it via a temporary file.
+    Load a tif from a non-seekable file-like object.
 
     """
-    temp_fd, temp_file_name = tempfile.mkstemp()
-    try:
-        try:
-            os.write(temp_fd, f.read())
-        finally:
-            os.close(temp_fd)
-        tif = libtiff.TIFF.open(temp_file_name)
-    finally:
-        os.unlink(temp_file_name)
+    f = StringIO.StringIO(f.read())
+    im = matplotlib.image.imread(f, format="tiff")
 
-    return tif.read_image()
+    return im
 
 
 class TiledOsMap(object):
@@ -260,7 +253,8 @@ class TiledOsMap(object):
         file_path = "{}/{}.tif".format(self.tile_path, tile_name)
 
         with self.zip_file.open(file_path) as f:
-            return _load_tif_from_file_like(self.zip_file.open(file_path))
+            return _load_tif_from_non_seekable_file(
+                                                 self.zip_file.open(file_path))
 
     def get_image_from_wgs84_rect(self,
                                   north_west_long_lat,
@@ -351,4 +345,7 @@ if __name__ == "__main__":
 
     print "Loading file"
     im = t._load_tile("ST")
-    import pdb; pdb.set_trace()
+    im = im[::10, ::10]
+    from matplotlib import pyplot as plt
+    plt.imshow(im)
+    plt.show()
