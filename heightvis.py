@@ -3,6 +3,7 @@ import collections
 import libtiff
 import math
 import numpy
+import osgrid
 import sys
 
 import quadtree
@@ -154,7 +155,8 @@ def _parse_eye_coords(s):
 
     return out
 
-def _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point):
+def _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point,
+               bgs=()):
     from matplotlib import pyplot as plt
     left_extent, top_extent = sphere_mapping.pixel_to_long_lat((0, 0))
     right_extent, bottom_extent = sphere_mapping.pixel_to_long_lat((-1, -1))
@@ -165,11 +167,14 @@ def _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point):
                       interpolation='nearest',
                       extent=(left_extent, right_extent,
                               bottom_extent, top_extent))
+    for bg in bgs:
+        visible_ax.imshow(bg.im, extent=bg.extent)
 
     x = numpy.arange(0., 1., 0.001)
     y = numpy.array([math.sin(200. * math.pi * i) for i in x])
     profile_ax = fig.add_subplot(122)
     profile_ax.plot(x, y)
+
 
     def update_profile(long_lat):
         start_x, start_y = map(float,
@@ -204,6 +209,8 @@ def _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point):
 
     plt.show()
 
+_BackgroundImage = collections.namedtuple('_BackgroundImage',
+                                          ('im', 'extent'))
 
 def main():
     parser = argparse.ArgumentParser(
@@ -219,9 +226,25 @@ def main():
                         'in metres, all in decimal format. Specifies the '
                         'viewpoint',
                        required=True) 
+    parser.add_argument('-o', '--os-data',
+                        help='OS map tiled zip file')
 
     args = parser.parse_args()
     world_file = _parse_esri_world_file(args.world_file)
+
+    if args.os_data:
+        print "Loading OS map zip"
+        tiled_os_map = osgrid.TiledOsMap(args.os_data)
+        centre = (-0.35404, 51.818051)
+        size = (1.0, 1.0)
+        os_dims = (400, 400)
+        os_extent = (centre[0] - size[0]/2., centre[0] + size[0]/2.,
+                     centre[1] - size[1]/2., centre[1] + size[1]/2.)
+        os_im = tiled_os_map.get_image_from_wgs84_rect(
+                                                  (os_extent[0], os_extent[3]),
+                                                  (os_extent[1], os_extent[2]),
+                                                  os_dims)
+        os_bg = _BackgroundImage(im=os_im, extent=os_extent)
 
     print "Loading tiff"
     height_im = _load_height_data(args.input_file)
@@ -249,7 +272,9 @@ def main():
     eye_point = numpy.array([list(eye_pixel) + [eye_height]]).T
     visible = height_map.get_visible(eye_point)
 
-    _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point)
+    bgs = (os_bg,) if args.os_data else ()
+    _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point,
+               bgs=bgs)
 
 if __name__ == '__main__':
     main()

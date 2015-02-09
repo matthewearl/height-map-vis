@@ -9,6 +9,11 @@ import tempfile
 import zipfile
 
 
+__all__ = (
+    'TiledOsMap',
+)
+
+
 _OS_MAP_GRID_TILES = (
     ("HL", "HM", "HN", "HO", "HP", "JL", "JM"),
     ("HQ", "HR", "HS", "HT", "HU", "JQ", "JR"),
@@ -328,7 +333,6 @@ class TiledOsMap(object):
 
         # Obtain the perspective transform to map long/lat coordinates to image
         # coordinates. 
-        import pdb; pdb.set_trace()
         dst_corners = ((0, 0),
                        (image_dims[0], 0),
                        (0, image_dims[1]),
