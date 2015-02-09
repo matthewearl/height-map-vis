@@ -1,6 +1,10 @@
 import cv2
+import libtiff
 import math
 import numpy
+import os
+import tempfile
+import zipfile
 
 
 _OS_MAP_GRID_TILES = (
@@ -214,77 +218,137 @@ def _wgs84_long_lat_to_os_grid(long_lat):
     return _osgb36_long_lat_to_os_grid(osgb36_long_lat)
 
 
-def get_image_from_wgs84_rect(north_west_long_lat,
-                              south_east_long_lat, image_dims):
+def _load_tif_from_file_like(f):
     """
-    Map a portion of an OS map into an image, whose bounds are defined by
-    minimum and maximum latitudes and longitudes.
+    Load a tif from a file-like object.
 
-    For example:
-      get_image_from_wgs84_rect((0, 55), (1, 54), (100, 100))
-
-    Will return a 100x100 pixel OS map where pixel (x, y) corresponds with
-    WGS84 longitude (x / 100) degrees and WGS84 latitude (55 - y / 100)
-    degrees.
+    libtiff doesn't have native support for this so do it via a temporary file.
 
     """
-    north_west_long_lat = tuple(math.pi * x / 180. for x in
+    temp_fd, temp_file_name = tempfile.mkstemp()
+    try:
+        try:
+            os.write(temp_fd, f.read())
+        finally:
+            os.close(temp_fd)
+        tif = libtiff.TIFF.open(temp_file_name)
+    finally:
+        os.unlink(temp_file_name)
+
+    return tif.read_image()
+
+
+class TiledOsMap(object):
+    """
+    A set of named OS map tiles contained in a zip file.
+
+
+    """
+    DEFAULT_TILE_PATH = "ras250_gb/data"
+
+
+    def __init__(self, zip_file_name, tile_path=DEFAULT_TILE_PATH):
+        self.zip_file = zipfile.ZipFile(zip_file_name, 'r')
+        self.tile_path = tile_path
+
+
+    def _load_tile(self, tile_name):
+        """
+        Load a tile from the zip file.
+
+        """
+        file_path = "{}/{}.tif".format(self.tile_path, tile_name)
+
+        with self.zip_file.open(file_path) as f:
+            return _load_tif_from_file_like(self.zip_file.open(file_path))
+
+    def get_image_from_wgs84_rect(self,
+                                  north_west_long_lat,
+                                  south_east_long_lat, image_dims):
+        """
+        Map a portion of an OS map into an image, whose bounds are defined by
+        minimum and maximum latitudes and longitudes.
+
+        For example:
+          get_image_from_wgs84_rect((0, 55), (1, 54), (100, 100))
+
+        Will return a 100x100 pixel OS map where pixel (x, y) corresponds with
+        WGS84 longitude (x / 100) degrees and WGS84 latitude (55 - y / 100)
+        degrees.
+
+        """
+        north_west_long_lat = tuple(math.pi * x / 180. for x in
                                                            north_west_long_lat)
-    south_east_long_lat = tuple(math.pi * x / 180. for x in
+        south_east_long_lat = tuple(math.pi * x / 180. for x in
                                                            south_east_long_lat)
 
-    # Obtain the corners of the rectangle in WGS84 long/lat coordinates.
-    long_lat_corners = (
-        (north_west_long_lat[0], north_west_long_lat[1]), # NW
-        (south_east_long_lat[0], north_west_long_lat[1]), # NE
-        (north_west_long_lat[0], south_east_long_lat[1]), # SW
-        (south_east_long_lat[0], south_east_long_lat[1]), # SE
-    )
-    
-    # Obtain the corners in OS grid coordinates.
-    os_grid_corners = tuple(map(_wgs84_long_lat_to_os_grid, long_lat_corners))
+        # Obtain the corners of the rectangle in WGS84 long/lat coordinates.
+        long_lat_corners = (
+            (north_west_long_lat[0], north_west_long_lat[1]), # NW
+            (south_east_long_lat[0], north_west_long_lat[1]), # NE
+            (north_west_long_lat[0], south_east_long_lat[1]), # SW
+            (south_east_long_lat[0], south_east_long_lat[1]), # SE
+        )
+        
+        # Obtain the corners in OS grid coordinates.
+        os_grid_corners = tuple(map(_wgs84_long_lat_to_os_grid,
+                                    long_lat_corners))
 
-    # Calculate a set of OS grid tiles that will cover the mapped rectangle.
-    os_grid_mins = (min(E for E, N in os_grid_corners),
-                    min(N for E, N in os_grid_corners))
-    os_grid_maxs = (max(E for E, N in os_grid_corners),
-                    max(N for E, N in os_grid_corners))
-    west_tile_east_idx = os_grid_mins[0] // 100000
-    east_tile_east_idx = os_grid_maxs[0] // 100000
-    south_tile_north_idx = os_grid_mins[1] // 100000
-    north_tile_north_idx = os_grid_maxs[1] // 100000
+        # Calculate a set of OS grid tiles that will cover the mapped rectangle.
+        os_grid_mins = (min(E for E, N in os_grid_corners),
+                        min(N for E, N in os_grid_corners))
+        os_grid_maxs = (max(E for E, N in os_grid_corners),
+                        max(N for E, N in os_grid_corners))
+        west_tile_east_idx = os_grid_mins[0] // 100000
+        east_tile_east_idx = os_grid_maxs[0] // 100000
+        south_tile_north_idx = os_grid_mins[1] // 100000
+        north_tile_north_idx = os_grid_maxs[1] // 100000
 
-    # Pull in imagery for these tiles and stitch them into a single image.
-    combined_tiles = numpy.vstack(
-        numpy.hstack(_load_tile(
-            _OS_MAP_GRID_TILES[-(1 + north_idx)][east_idx])
-                for east_idx in range(west_tile_east_idx,
-                                      east_tile_east_idx + 1))
-        for north_idx in reversed(range(south_tile_north_idx,
-                                        north_tile_north_idx + 1)))
+        # Pull in imagery for these tiles and stitch them into a single image.
+        combined_tiles = numpy.vstack(
+            numpy.hstack(_load_tile(
+                _OS_MAP_GRID_TILES[-(1 + north_idx)][east_idx])
+                    for east_idx in range(west_tile_east_idx,
+                                          east_tile_east_idx + 1))
+            for north_idx in reversed(range(south_tile_north_idx,
+                                            north_tile_north_idx + 1)))
 
-    # Define a function to convert from OS grid coordinates to image x, y
-    # coordinates and use it to calculate the corners in image coordinates.
-    northings_per_pixel = 100000. * ((1 + north_tile_north_idx -
-                                      south_tile_north_idx) /
-                                                     combined_tiles.shape[0])
-    eastings_per_pixel = 100000. * ((1 + east_tile_east_idx -
-                                      west_tile_east_idx) /
-                                                     combined_tiles.shape[1])
-    north_west_os_grid_coord = (100000. * west_tile_east_idx,
-                                100000. * (1 + north_tile_north_idx))
-    def os_grid_to_pixel_coordinates(grid_coord):
-        x = (grid_coord[0] - north_west_os_grid_coord[0]) / eastings_per_pixel
-        y = (north_west_os_grid_coord[1] - grid_coord[1]) / northings_per_pixel
-        return x, y
-    image_corners = tuple(map(os_grid_to_pixel_coordinates, os_grid_corners))
+        # Define a function to convert from OS grid coordinates to image x, y
+        # coordinates and use it to calculate the corners in image coordinates.
+        northings_per_pixel = 100000. * ((1 + north_tile_north_idx -
+                                          south_tile_north_idx) /
+                                                       combined_tiles.shape[0])
+        eastings_per_pixel = 100000. * ((1 + east_tile_east_idx -
+                                          west_tile_east_idx) /
+                                                       combined_tiles.shape[1])
+        north_west_os_grid_coord = (100000. * west_tile_east_idx,
+                                    100000. * (1 + north_tile_north_idx))
+        def os_grid_to_pixel_coordinates(grid_coord):
+            x = ((grid_coord[0] - north_west_os_grid_coord[0]) /
+                                                            eastings_per_pixel)
+            y = ((north_west_os_grid_coord[1] - grid_coord[1]) /
+                                                           northings_per_pixel)
+            return x, y
+        image_corners = tuple(map(os_grid_to_pixel_coordinates,
+                                  os_grid_corners))
 
-    # Obtain the perspective transform to map long/lat coordinates to image
-    # coordinates. 
-    mat = cv2.getPerspectiveTransform(long_lat_corners, image_corners)
+        # Obtain the perspective transform to map long/lat coordinates to image
+        # coordinates. 
+        mat = cv2.getPerspectiveTransform(long_lat_corners, image_corners)
 
-    # Use the transform to produce the output image.
-    out = cv2.warpPerspective(combined_tiles, mat, image_dims,
-                              flags=cv2.WARP_INVERSE_MAP)
+        # Use the transform to produce the output image.
+        out = cv2.warpPerspective(combined_tiles, mat, image_dims,
+                                  flags=cv2.WARP_INVERSE_MAP)
 
+        return out
+
+
+if __name__ == "__main__":
+    import sys
+
+    print "Opening zip file"
+    t = TiledOsMap(sys.argv[1])
+
+    print "Loading file"
+    im = t._load_tile("ST")
     import pdb; pdb.set_trace()
