@@ -293,14 +293,14 @@ class TiledOsMap(object):
                         min(N for E, N in os_grid_corners))
         os_grid_maxs = (max(E for E, N in os_grid_corners),
                         max(N for E, N in os_grid_corners))
-        west_tile_east_idx = os_grid_mins[0] // 100000
-        east_tile_east_idx = os_grid_maxs[0] // 100000
-        south_tile_north_idx = os_grid_mins[1] // 100000
-        north_tile_north_idx = os_grid_maxs[1] // 100000
+        west_tile_east_idx = int(os_grid_mins[0] // 100000)
+        east_tile_east_idx = int(os_grid_maxs[0] // 100000)
+        south_tile_north_idx = int(os_grid_mins[1] // 100000)
+        north_tile_north_idx = int(os_grid_maxs[1] // 100000)
 
         # Pull in imagery for these tiles and stitch them into a single image.
         combined_tiles = numpy.vstack(
-            numpy.hstack(_load_tile(
+            numpy.hstack(self._load_tile(
                 _OS_MAP_GRID_TILES[-(1 + north_idx)][east_idx])
                     for east_idx in range(west_tile_east_idx,
                                           east_tile_east_idx + 1))
@@ -309,10 +309,10 @@ class TiledOsMap(object):
 
         # Define a function to convert from OS grid coordinates to image x, y
         # coordinates and use it to calculate the corners in image coordinates.
-        northings_per_pixel = 100000. * ((1 + north_tile_north_idx -
+        northings_per_pixel = 100000. * ((1. + north_tile_north_idx -
                                           south_tile_north_idx) /
                                                        combined_tiles.shape[0])
-        eastings_per_pixel = 100000. * ((1 + east_tile_east_idx -
+        eastings_per_pixel = 100000. * ((1. + east_tile_east_idx -
                                           west_tile_east_idx) /
                                                        combined_tiles.shape[1])
         north_west_os_grid_coord = (100000. * west_tile_east_idx,
@@ -323,12 +323,19 @@ class TiledOsMap(object):
             y = ((north_west_os_grid_coord[1] - grid_coord[1]) /
                                                            northings_per_pixel)
             return x, y
-        image_corners = tuple(map(os_grid_to_pixel_coordinates,
+        src_corners = tuple(map(os_grid_to_pixel_coordinates,
                                   os_grid_corners))
 
         # Obtain the perspective transform to map long/lat coordinates to image
         # coordinates. 
-        mat = cv2.getPerspectiveTransform(long_lat_corners, image_corners)
+        import pdb; pdb.set_trace()
+        dst_corners = ((0, 0),
+                       (image_dims[0], 0),
+                       (0, image_dims[1]),
+                       image_dims)
+        mat = cv2.getPerspectiveTransform(
+                                  numpy.array(dst_corners, numpy.float32),
+                                  numpy.array(src_corners, numpy.float32))
 
         # Use the transform to produce the output image.
         out = cv2.warpPerspective(combined_tiles, mat, image_dims,
@@ -337,7 +344,7 @@ class TiledOsMap(object):
         return out
 
 
-if __name__ == "__main__":
+def _test_tile_loading():
     import sys
 
     print "Opening zip file"
@@ -349,3 +356,22 @@ if __name__ == "__main__":
     from matplotlib import pyplot as plt
     plt.imshow(im)
     plt.show()
+    
+
+def _test_image_from_wgs84_rect():
+    import sys
+
+    print "Opening zip file"
+    t = TiledOsMap(sys.argv[1])
+    se = -0.35404, 51.818051
+    nw = -0.387700, 51.832913
+    im = t.get_image_from_wgs84_rect(nw, se, (500, 500))
+
+    from matplotlib import pyplot as plt
+    plt.imshow(im)
+    plt.show()
+
+
+if __name__ == "__main__":
+    _test_image_from_wgs84_rect()
+
