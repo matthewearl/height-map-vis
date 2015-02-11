@@ -270,8 +270,8 @@ class _LongLatRect(_LongLatRectBase):
         north-west and south-east pixel coordinates of the bounding rectangle.
 
         """
-        nw_pix = sphere_mapping.long_lat_to_pixel(self.nw)
-        se_pix = sphere_mapping.long_lat_to_pixel(self.se)
+        nw_pix = tuple(map(int, sphere_mapping.long_lat_to_pixel(self.nw)))
+        se_pix = tuple(map(int, sphere_mapping.long_lat_to_pixel(self.se)))
 
         return nw_pix, se_pix
 
@@ -302,8 +302,7 @@ def _get_view_bounds(args):
     return _LongLatRect(nw, se)
 
 
-def _restrict_image_by_view_bounds(im, view_bounds, sphere_mapping,
-                                   sample_factor=1):
+def _restrict_image_to_rect(im, view_bounds, sphere_mapping, sample_factor=1):
     """
     Restrict an image to a particular region.
 
@@ -316,8 +315,8 @@ def _restrict_image_by_view_bounds(im, view_bounds, sphere_mapping,
 
     nw_pix, se_pix = view_bounds.to_pixels(sphere_mapping)
 
-    restricted_im = im[int(nw_pix[0]):int(se_pix[0]):sample_factor,
-                       int(nw_pix[1]):int(se_pix[1]):sample_factor]
+    restricted_im = im[nw_pix[1]:se_pix[1] + 1:sample_factor,
+                       nw_pix[0]:se_pix[0] + 1:sample_factor]
 
     return restricted_im
 
@@ -342,6 +341,8 @@ def _get_visible(args):
     sphere_mapping = _SphereMapping.from_world_file(world_file,
                                                     (height_im.shape[1],
                                                      height_im.shape[0]))
+    height_im = height_im[::10, ::10]
+    sphere_mapping = sphere_mapping[::10, ::10]
 
     # Obtain long/lat bounds for the height-map data based on the view bounds
     # extended to include the eye coordinate.
@@ -354,9 +355,9 @@ def _get_visible(args):
     # Restrict according to the height-map bounds. Update the sphere-mapping
     # accordingly, and clamp the minimum value (otherwise missing values are
     # mapped to -2**16).
-    height_im = _restrict_image_by_view_bounds(height_im,
-                                               height_bounds,
-                                               sphere_mapping)
+    height_im = _restrict_image_to_rect(height_im,
+                                        height_bounds,
+                                        sphere_mapping)
     sphere_mapping = _SphereMapping(pixel_size=sphere_mapping.pixel_size,
                                     top_left_long_lat=height_bounds.nw,
                                     image_dims=(height_im.shape[1],
@@ -369,11 +370,11 @@ def _get_visible(args):
 
     # Calculate visibility across the view bounds.
     eye_pixel = sphere_mapping.long_lat_to_pixel(eye_long_lat)
-    import pdb; pdb.set_trace()
     offset_eye_height = (height_im[int(eye_pixel[1]), int(eye_pixel[0])] +
                                                                     eye_height)
     eye_point = numpy.array([list(eye_pixel) + [offset_eye_height]]).T
     height_map = quadtree.HeightMap(height_im)
+    import pdb; pdb.set_trace()
     visible = height_map.get_visible(
                                     eye_point,
                                     rect=view_bounds.to_pixels(sphere_mapping))

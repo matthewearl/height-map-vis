@@ -294,9 +294,10 @@ class HeightMap(QuadTree):
         same size as the rectangle.
 
         """
+        import pdb; pdb.set_trace()
         if rect is None:
             rect = (0, 0), (self.data.shape[1], self.data.shape[0])
-        nw_pix, sw_pix = rect
+        nw_pix, se_pix = rect
         rect_shape = (se_pix[1] - nw_pix[1]), (se_pix[0] - nw_pix[0])
 
         visible = numpy.zeros(rect_shape)
