@@ -261,15 +261,13 @@ class TiledOsMap(object):
             return _load_tif_from_non_seekable_file(
                                                  self.zip_file.open(file_path))
 
-    def get_image_from_wgs84_rect(self,
-                                  north_west_long_lat,
-                                  south_east_long_lat, image_dims):
+    def get_image_from_wgs84_rect(self, rect, image_dims):
         """
         Map a portion of an OS map into an image, whose bounds are defined by
-        minimum and maximum latitudes and longitudes.
+        a bounding rectangle.
 
         For example:
-          get_image_from_wgs84_rect((0, 55), (1, 54), (100, 100))
+          get_image_from_wgs84_rect(((0, 55), (1, 54)), (100, 100))
 
         Will return a 100x100 pixel OS map where pixel (x, y) corresponds with
         WGS84 longitude (x / 100) degrees and WGS84 latitude (55 - y / 100)
@@ -277,9 +275,9 @@ class TiledOsMap(object):
 
         """
         north_west_long_lat = tuple(math.pi * x / 180. for x in
-                                                           north_west_long_lat)
+                                                           rect[0])
         south_east_long_lat = tuple(math.pi * x / 180. for x in
-                                                           south_east_long_lat)
+                                                           rect[1])
 
         # Obtain the corners of the rectangle in WGS84 long/lat coordinates.
         long_lat_corners = (

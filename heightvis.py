@@ -131,14 +131,14 @@ class _SphereMapping(object):
         long_lats *= numpy.pi / 180.
 
         # Plug these values into the spherical law of cosines to obtain the
-        # cosine of the angle from the point in the centre of the image. (For
+        # cosine of the angle from the point in the center of the image. (For
         # the purposes of these comments refer to the angle as theta.)
-        centre_coords = (self.image_dims[1] // 2,
+        center_coords = (self.image_dims[1] // 2,
                          self.image_dims[0] // 2)
-        long_diffs = long_lats[0] - long_lats[0][centre_coords]
-        cos_angles = (numpy.sin(long_lats[1][centre_coords]) *
+        long_diffs = long_lats[0] - long_lats[0][center_coords]
+        cos_angles = (numpy.sin(long_lats[1][center_coords]) *
                             numpy.sin(long_lats[1, :, :]) +
-                      numpy.cos(long_lats[1][centre_coords]) *
+                      numpy.cos(long_lats[1][center_coords]) *
                             numpy.cos(long_lats[1, :, :]) *
                             numpy.cos(long_diffs))
 
@@ -241,10 +241,11 @@ _LongLatRectBase = collections.namedtuple('_LongLatRectBase', ('nw', 'se'))
 class _LongLatRect(_LongLatRectBase):
     """A rectangle defined in longitude / latitude coordinates."""
 
+
     def extend(self, long_lat):
         """Extend a view bounds to include a given point."""
     
-        nw, se = list(self.nw), list(self.ne)
+        nw, se = list(self.nw), list(self.se)
         # Check western bound
         if long_lat[0] < nw[0]: 
             nw[0] = long_lat[0]
@@ -260,6 +261,7 @@ class _LongLatRect(_LongLatRectBase):
 
         return _LongLatRect(tuple(nw), tuple(se))
 
+
     def to_pixels(self, sphere_mapping):
         """
         Return the bounds mapping to pixels, according to a sphere mapping.
@@ -268,8 +270,15 @@ class _LongLatRect(_LongLatRectBase):
         north-west and south-east pixel coordinates of the bounding rectangle.
 
         """
-        nw_pix = sphere_mapping.long_lat_to_pixel(nw)
-        se_pix = sphere_mapping.long_lat_to_pixel(se)
+        nw_pix = sphere_mapping.long_lat_to_pixel(self.nw)
+        se_pix = sphere_mapping.long_lat_to_pixel(self.se)
+
+        return nw_pix, se_pix
+
+
+    def to_extent(self):
+        """Return a matplotlib compatible (left, right, bottom, top) tuple."""
+        return (self.nw[0], self.se[0], self.se[1], self.nw[1])
             
 
 _BackgroundImage = collections.namedtuple('_BackgroundImage',
@@ -284,7 +293,7 @@ def _get_view_bounds(args):
     north-west and the south-east points of the square, respectively.
 
     """
-    center = _parse_lat_long(args.view_centre)
+    center = _parse_lat_long(args.view_center)
     size = float(args.view_size)
 
     nw = center[0] - size / 2, center[1] + size / 2
@@ -294,7 +303,7 @@ def _get_view_bounds(args):
 
 
 def _restrict_image_by_view_bounds(im, view_bounds, sphere_mapping,
-                                   sample_factor=1)
+                                   sample_factor=1):
     """
     Restrict an image to a particular region.
 
@@ -307,8 +316,8 @@ def _restrict_image_by_view_bounds(im, view_bounds, sphere_mapping,
 
     nw_pix, se_pix = view_bounds.to_pixels(sphere_mapping)
 
-    restricted_im = im[nw_pix[0]:se_pix[0]:sample_factor,
-                       nw_pix[1]:se_pix[1]:sample_factor]
+    restricted_im = im[int(nw_pix[0]):int(se_pix[0]):sample_factor,
+                       int(nw_pix[1]):int(se_pix[1]):sample_factor]
 
     return restricted_im
 
@@ -323,6 +332,9 @@ def _get_visible(args):
     """
 
     view_bounds = _get_view_bounds(args)
+
+    # Load the raw height data file.
+    height_im = _load_height_data(args.input_file)
 
     # Obtain the sphere mapping, which maps pixel locations in the height map
     # to long/lat coordinates, and vice versa.
@@ -339,16 +351,16 @@ def _get_visible(args):
     height_bounds = view_bounds.extend(eye_long_lat)
     del eye_coords
 
-    # Load the TIFF height data and restrict according to the height-map
-    # bounds. Update the sphere-mapping accordingly, and clamp the minimum
-    # value (otherwise missing values are mapped to -2**16).
-    height_im = _load_height_data(args.input_file)
+    # Restrict according to the height-map bounds. Update the sphere-mapping
+    # accordingly, and clamp the minimum value (otherwise missing values are
+    # mapped to -2**16).
     height_im = _restrict_image_by_view_bounds(height_im,
                                                height_bounds,
-                                               sphere_mapping
-    sphere_mapping = _restrict_image_by_view_bounds(sphere_mapping,
-                                                    height_bounds,
-                                                    sphere_mapping)
+                                               sphere_mapping)
+    sphere_mapping = _SphereMapping(pixel_size=sphere_mapping.pixel_size,
+                                    top_left_long_lat=height_bounds.nw,
+                                    image_dims=(height_im.shape[1],
+                                                height_im.shape[0]))
     height_im = numpy.maximum(-10. * numpy.ones(height_im.shape), height_im)
 
     # Offset the height map to account for curvature of the earth.
@@ -357,6 +369,7 @@ def _get_visible(args):
 
     # Calculate visibility across the view bounds.
     eye_pixel = sphere_mapping.long_lat_to_pixel(eye_long_lat)
+    import pdb; pdb.set_trace()
     offset_eye_height = (height_im[int(eye_pixel[1]), int(eye_pixel[0])] +
                                                                     eye_height)
     eye_point = numpy.array([list(eye_pixel) + [offset_eye_height]]).T
@@ -366,6 +379,19 @@ def _get_visible(args):
                                     rect=view_bounds.to_pixels(sphere_mapping))
 
     return visible, height_im, curve_im, sphere_mapping, eye_point
+
+
+def _load_os_bg(args, pixels_per_degree=1000):
+    view_bounds = _get_view_bounds(args)
+
+    tiled_os_map = osgrid.TiledOsMap(args.os_data)
+    os_dims = (int(pixels_per_degree * float(args.view_size)),
+               int(pixels_per_degree * float(args.view_size)))
+
+    os_im = tiled_os_map.get_image_from_wgs84_rect(view_bounds, os_dims)
+    os_bg = _BackgroundImage(im=os_im, extent=view_bounds.to_extent())
+
+    return os_bg
 
 
 def main():
@@ -386,27 +412,17 @@ def main():
                         help='OS map tiled zip file')
     parser.add_argument('-c', '--view-center',
                         help='Center of the square region to be viewed as a '
-                             'space separated latitude/longitude in degrees.')
+                             'space separated latitude/longitude in degrees.',
+                        required=True)
     parser.add_argument('-s', '--view-size',
                         help='Size of the square region to be viewed, in '
-                             'degrees.')
+                             'degrees.',
+                        required=True)
 
     args = parser.parse_args()
-    world_file = _parse_esri_world_file(args.world_file)
 
     if args.os_data:
-        print "Loading OS map zip"
-        tiled_os_map = osgrid.TiledOsMap(args.os_data)
-        centre = (-0.35404, 51.818051)
-        size = (0.5, 0.5)
-        os_dims = (1000, 1000)
-        os_extent = (centre[0] - size[0]/2., centre[0] + size[0]/2.,
-                     centre[1] - size[1]/2., centre[1] + size[1]/2.)
-        os_im = tiled_os_map.get_image_from_wgs84_rect(
-                                                  (os_extent[0], os_extent[3]),
-                                                  (os_extent[1], os_extent[2]),
-                                                  os_dims)
-        os_bg = _BackgroundImage(im=os_im, extent=os_extent)
+        os_bg = _load_os_bg(args)
 
     visible, height_im, curve_im, sphere_mapping, eye_point = (
                                                             _get_visible(args))
@@ -414,6 +430,7 @@ def main():
     bgs = (os_bg,) if args.os_data else ()
     _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point,
                bgs=bgs)
+
 
 if __name__ == '__main__':
     main()
