@@ -148,13 +148,24 @@ class _SphereMapping(object):
 
         return height_map
 
+
 def _parse_eye_coords(s):
     out = tuple(float(x) for x in s.split())
 
     if len(out) != 3:
-        raise Exception("Invalid eye-coords argument {!r}".format(s))
+        raise Exception("Invalid eye-coords {!r}".format(s))
 
     return out
+
+
+def _parse_lat_long(s):
+    out = tuple(float(x) for x in s.split())
+
+    if len(out) != 2:
+        raise Exception("Invalid latitude/longitude {!r}".format(s))
+
+    return out[1], out[0]
+
 
 def _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point,
                bgs=()):
@@ -225,8 +236,137 @@ def _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point,
 
     plt.show()
 
+
+_LongLatRectBase = collections.namedtuple('_LongLatRectBase', ('nw', 'se'))
+class _LongLatRect(_LongLatRectBase):
+    """A rectangle defined in longitude / latitude coordinates."""
+
+    def extend(self, long_lat):
+        """Extend a view bounds to include a given point."""
+    
+        nw, se = list(self.nw), list(self.ne)
+        # Check western bound
+        if long_lat[0] < nw[0]: 
+            nw[0] = long_lat[0]
+        # Check eastern bound
+        if long_lat[0] > se[0]: 
+            se[0] = long_lat[0]
+        # Check southern bound
+        if long_lat[1] < se[1]: 
+            se[1] = long_lat[1]
+        # Check northern bound
+        if long_lat[1] > nw[1]: 
+            nw[1] = long_lat[1]
+
+        return _LongLatRect(tuple(nw), tuple(se))
+
+    def to_pixels(self, sphere_mapping):
+        """
+        Return the bounds mapping to pixels, according to a sphere mapping.
+
+        A pair (nw_pix, se_pix) is returned, which corresponds with the
+        north-west and south-east pixel coordinates of the bounding rectangle.
+
+        """
+        nw_pix = sphere_mapping.long_lat_to_pixel(nw)
+        se_pix = sphere_mapping.long_lat_to_pixel(se)
+            
+
 _BackgroundImage = collections.namedtuple('_BackgroundImage',
                                           ('im', 'extent'))
+
+def _get_view_bounds(args):
+    """
+    Determine the square region to view.
+    
+    Do this based on the --view-center and --view-size arguments. The returned
+    value is a pair (nw, se), indicating the longitude/latitude of the
+    north-west and the south-east points of the square, respectively.
+
+    """
+    center = _parse_lat_long(args.view_centre)
+    size = float(args.view_size)
+
+    nw = center[0] - size / 2, center[1] + size / 2
+    se = center[0] + size / 2, center[1] - size / 2
+
+    return _LongLatRect(nw, se)
+
+
+def _restrict_image_by_view_bounds(im, view_bounds, sphere_mapping,
+                                   sample_factor=1)
+    """
+    Restrict an image to a particular region.
+
+    The region is determined by view_bounds, a rectangle defined in
+    longitude/latitude coordinates. The sphere mapping argument is used to map
+    long/lat coordinates to pixel coordinates. An option `sample_factor`
+    will down-size the output image by the given factor.
+
+    """
+
+    nw_pix, se_pix = view_bounds.to_pixels(sphere_mapping)
+
+    restricted_im = im[nw_pix[0]:se_pix[0]:sample_factor,
+                       nw_pix[1]:se_pix[1]:sample_factor]
+
+    return restricted_im
+
+
+def _get_visible(args):
+    """
+    Return an image representing the visible part of the image.
+
+    This calculation uses the --input-file, --view-{center,size}, --world-file,
+    and --eye-coords arguments.
+
+    """
+
+    view_bounds = _get_view_bounds(args)
+
+    # Obtain the sphere mapping, which maps pixel locations in the height map
+    # to long/lat coordinates, and vice versa.
+    world_file = _parse_esri_world_file(args.world_file)
+    sphere_mapping = _SphereMapping.from_world_file(world_file,
+                                                    (height_im.shape[1],
+                                                     height_im.shape[0]))
+
+    # Obtain long/lat bounds for the height-map data based on the view bounds
+    # extended to include the eye coordinate.
+    eye_coords = _parse_eye_coords(args.eye_coords)
+    eye_long_lat = eye_coords[1], eye_coords[0]
+    eye_height = eye_coords[2]
+    height_bounds = view_bounds.extend(eye_long_lat)
+    del eye_coords
+
+    # Load the TIFF height data and restrict according to the height-map
+    # bounds. Update the sphere-mapping accordingly, and clamp the minimum
+    # value (otherwise missing values are mapped to -2**16).
+    height_im = _load_height_data(args.input_file)
+    height_im = _restrict_image_by_view_bounds(height_im,
+                                               height_bounds,
+                                               sphere_mapping
+    sphere_mapping = _restrict_image_by_view_bounds(sphere_mapping,
+                                                    height_bounds,
+                                                    sphere_mapping)
+    height_im = numpy.maximum(-10. * numpy.ones(height_im.shape), height_im)
+
+    # Offset the height map to account for curvature of the earth.
+    curve_im = sphere_mapping.gen_height_map(EARTH_RADIUS)
+    height_im += curve_im
+
+    # Calculate visibility across the view bounds.
+    eye_pixel = sphere_mapping.long_lat_to_pixel(eye_long_lat)
+    offset_eye_height = (height_im[int(eye_pixel[1]), int(eye_pixel[0])] +
+                                                                    eye_height)
+    eye_point = numpy.array([list(eye_pixel) + [offset_eye_height]]).T
+    height_map = quadtree.HeightMap(height_im)
+    visible = height_map.get_visible(
+                                    eye_point,
+                                    rect=view_bounds.to_pixels(sphere_mapping))
+
+    return visible, height_im, curve_im, sphere_mapping, eye_point
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -244,6 +384,12 @@ def main():
                        required=True) 
     parser.add_argument('-o', '--os-data',
                         help='OS map tiled zip file')
+    parser.add_argument('-c', '--view-center',
+                        help='Center of the square region to be viewed as a '
+                             'space separated latitude/longitude in degrees.')
+    parser.add_argument('-s', '--view-size',
+                        help='Size of the square region to be viewed, in '
+                             'degrees.')
 
     args = parser.parse_args()
     world_file = _parse_esri_world_file(args.world_file)
@@ -262,32 +408,9 @@ def main():
                                                   os_dims)
         os_bg = _BackgroundImage(im=os_im, extent=os_extent)
 
-    print "Loading tiff"
-    height_im = _load_height_data(args.input_file)
-    sphere_mapping = _SphereMapping.from_world_file(world_file,
-                                                    (height_im.shape[1],
-                                                     height_im.shape[0]))
-    height_im = height_im[3200:5200:20, -2000::20]
-    height_im = numpy.maximum(-10. * numpy.ones(height_im.shape), height_im)
-
-    print "Offsetting heightmap due to earth curvature"
-    sphere_mapping = sphere_mapping[3200:5200:20, -2000::20]
-    curve_im = sphere_mapping.gen_height_map(EARTH_RADIUS)
-    height_im += curve_im
-
-    print "Building quad tree"
-    height_map = quadtree.HeightMap(height_im)
-
-    print "Calculating visibility"
-    eye_arg = _parse_eye_coords(args.eye_coords)
-    eye_pixel = sphere_mapping.long_lat_to_pixel(
-                    (eye_arg[1], eye_arg[0]))
-    eye_height = height_im[int(eye_pixel[1]),
-                           int(eye_pixel[0])] + eye_arg[2]
-    print "Eye is at {}".format(eye_pixel)
-    eye_point = numpy.array([list(eye_pixel) + [eye_height]]).T
-    visible = height_map.get_visible(eye_point)
-
+    visible, height_im, curve_im, sphere_mapping, eye_point = (
+                                                            _get_visible(args))
+    
     bgs = (os_bg,) if args.os_data else ()
     _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point,
                bgs=bgs)

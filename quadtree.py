@@ -285,14 +285,29 @@ class HeightMap(QuadTree):
                             for c in self.children)
 
 
-    def get_visible(self, eye_point):
-        visible = numpy.zeros(self.data.shape)
-        for r in xrange(self.data.shape[0]):
-            print "Row {} / {}".format(r, self.data.shape[0])
-            for c in xrange(self.data.shape[1]):
-                ray_end = numpy.array([[c + 0.5],
-                                        [r + 0.5],
-                                        [self.data[r, c] + self.RAY_OFFSET]])
+    def get_visible(self, eye_point, rect=None):
+        """
+        Return visibility information for an eye-point.
+
+        A rectangle can be passed, in which case visibility information will be
+        restricted to the given rectangle, and the returned data will be the
+        same size as the rectangle.
+
+        """
+        if rect is None:
+            rect = (0, 0), (self.data.shape[1], self.data.shape[0])
+        nw_pix, sw_pix = rect
+        rect_shape = (se_pix[1] - nw_pix[1]), (se_pix[0] - nw_pix[0])
+
+        visible = numpy.zeros(rect_shape)
+        for r in xrange(rect_shape[0]):
+            print "Row {} / {}".format(r, rect_shape[0])
+            for c in xrange(rect_shape[1]):
+                src_r, src_c = nw_pix[1] + r, nw_pix[0] + c
+                ray_end = numpy.array([[src_c + 0.5],
+                                        [src_r + 0.5],
+                                        [self.data[src_r, src_c] + 
+                                                             self.RAY_OFFSET]])
                 
                 ray_dir = (ray_end - eye_point)
                 max_ray_len = math.sqrt(ray_dir[0, 0] ** 2 +
