@@ -101,9 +101,22 @@ class _SphereMapping(object):
         return _SphereMapping(
                           pix_size, self.pixel_to_long_lat(tl_pixel), img_dims)
 
-    def gen_height_map(self, sphere_radius):
+    def gen_height_map(self, sphere_radius, origin=None):
         """
         Get a height map representing curvature over the region.
+
+        Accept an optional origin, which is the long/lat where the height map
+        will be 0. Other points on the height map will fall reduce in value the
+        further they get from the origin.
+
+        The value of a given point P is:
+
+            sphere_radius * (cos(theta) - 1)
+
+        Where theta is the angle between the point P and the origin.
+
+        This is an approximatation of the curvature of the sphere which is
+        valid for small angles.
 
         """
 
@@ -131,14 +144,18 @@ class _SphereMapping(object):
         long_lats *= numpy.pi / 180.
 
         # Plug these values into the spherical law of cosines to obtain the
-        # cosine of the angle from the point in the center of the image. (For
-        # the purposes of these comments refer to the angle as theta.)
-        center_coords = (self.image_dims[1] // 2,
-                         self.image_dims[0] // 2)
-        long_diffs = long_lats[0] - long_lats[0][center_coords]
-        cos_angles = (numpy.sin(long_lats[1][center_coords]) *
+        # cosine of the angle from the origin. (For the purposes of these
+        # comments refer to the angle as theta.)
+        if origin is None:
+            origin_coords = (self.image_dims[1] // 2,
+                             self.image_dims[0] // 2)
+        else:
+            origin_coords = self.long_lat_to_pixel(origin)
+         
+        long_diffs = long_lats[0] - long_lats[0][origin_coords]
+        cos_angles = (numpy.sin(long_lats[1][origin_coords]) *
                             numpy.sin(long_lats[1, :, :]) +
-                      numpy.cos(long_lats[1][center_coords]) *
+                      numpy.cos(long_lats[1][origin_coords]) *
                             numpy.cos(long_lats[1, :, :]) *
                             numpy.cos(long_diffs))
 
@@ -343,6 +360,9 @@ def _get_visible(args):
                                                     (height_im.shape[1],
                                                      height_im.shape[0]))
 
+    height_im = height_im[::10, ::10]
+    sphere_mapping = sphere_mapping[::10, ::10]
+
     # Obtain long/lat bounds for the height-map data based on the view bounds
     # extended to include the eye coordinate.
     eye_coords = _parse_eye_coords(args.eye_coords)
@@ -364,7 +384,15 @@ def _get_visible(args):
     height_im = numpy.maximum(-10. * numpy.ones(height_im.shape), height_im)
 
     # Offset the height map to account for curvature of the earth.
-    curve_im = sphere_mapping.gen_height_map(EARTH_RADIUS)
+    #
+    # The eye-point is used as the origin for the curve. This is to minimize
+    # rays with a negative gradient from the terrain to the eye. Such rays are
+    # bad as they are (almost certainly) going to intersect with the grid cell
+    # being traced. A better solution for this would be to use bilinear
+    # interpolation on the height-map, rather than nearest neighbour, however
+    # this hack should get us most of the way there.
+    curve_im = sphere_mapping.gen_height_map(EARTH_RADIUS,
+                                             origin=eye_long_lat)
     height_im += curve_im
 
     # Calculate visibility across the view bounds.
