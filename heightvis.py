@@ -167,24 +167,26 @@ def _parse_lat_long(s):
     return out[1], out[0]
 
 
-def _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point,
-               bgs=()):
+def _plot_data(visible, view_bounds, height_im, curve_im, sphere_mapping,
+               eye_point, bgs=()):
     # Overhead visibility plot, including background data, if available. The
     # visibility info is converted into RGBA with an alpha channel.
     assert len(visible.shape) == 2, "visible should be a greyscale"
     alpha = visible * 0.5
     visible = numpy.array([numpy.zeros(visible.shape)] * 3 + [alpha])
     visible = numpy.transpose(visible, (1, 2, 0))
-    left_extent, top_extent = sphere_mapping.pixel_to_long_lat((0, 0))
-    right_extent, bottom_extent = sphere_mapping.pixel_to_long_lat((-1, -1))
     fig = plt.figure()
     visible_ax = fig.add_subplot(121)
     for bg in bgs:
+        print "Bg extent: {}".format(bg.extent)
         visible_ax.imshow(bg.im, extent=bg.extent)
+    left_extent, top_extent = sphere_mapping.pixel_to_long_lat((0, 0))
+    right_extent, bottom_extent = sphere_mapping.pixel_to_long_lat((-1, -1))
     visible_ax.imshow(visible,
                       interpolation='nearest',
                       extent=(left_extent, right_extent,
                               bottom_extent, top_extent))
+                      #extent=view_bounds.to_extent())
 
     # Dummy data for the profile plot. The profile plot is a side on view
     # showing:
@@ -329,7 +331,6 @@ def _get_visible(args):
     and --eye-coords arguments.
 
     """
-
     view_bounds = _get_view_bounds(args)
 
     # Load the raw height data file.
@@ -341,8 +342,6 @@ def _get_visible(args):
     sphere_mapping = _SphereMapping.from_world_file(world_file,
                                                     (height_im.shape[1],
                                                      height_im.shape[0]))
-    height_im = height_im[::10, ::10]
-    sphere_mapping = sphere_mapping[::10, ::10]
 
     # Obtain long/lat bounds for the height-map data based on the view bounds
     # extended to include the eye coordinate.
@@ -374,15 +373,15 @@ def _get_visible(args):
                                                                     eye_height)
     eye_point = numpy.array([list(eye_pixel) + [offset_eye_height]]).T
     height_map = quadtree.HeightMap(height_im)
-    import pdb; pdb.set_trace()
     visible = height_map.get_visible(
                                     eye_point,
-                                    rect=view_bounds.to_pixels(sphere_mapping))
+                                    )
+                                    #rect=view_bounds.to_pixels(sphere_mapping))
 
-    return visible, height_im, curve_im, sphere_mapping, eye_point
+    return visible, view_bounds, height_im, curve_im, sphere_mapping, eye_point
 
 
-def _load_os_bg(args, pixels_per_degree=1000):
+def _load_os_bg(args, pixels_per_degree=3000):
     view_bounds = _get_view_bounds(args)
 
     tiled_os_map = osgrid.TiledOsMap(args.os_data)
@@ -425,12 +424,12 @@ def main():
     if args.os_data:
         os_bg = _load_os_bg(args)
 
-    visible, height_im, curve_im, sphere_mapping, eye_point = (
+    visible, view_bounds, height_im, curve_im, sphere_mapping, eye_point = (
                                                             _get_visible(args))
     
     bgs = (os_bg,) if args.os_data else ()
-    _plot_data(visible, height_im, curve_im, sphere_mapping, eye_point,
-               bgs=bgs)
+    _plot_data(visible, view_bounds, height_im, curve_im, sphere_mapping,
+               eye_point, bgs=bgs)
 
 
 if __name__ == '__main__':
