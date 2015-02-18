@@ -150,7 +150,6 @@ class _SphereMapping(object):
             origin_coords = (self.image_dims[1] // 2,
                              self.image_dims[0] // 2)
         else:
-            import pdb; pdb.set_trace()
             origin_coords = self.long_lat_to_pixel(origin)
             origin_coords = origin_coords[1], origin_coords[0]
          
@@ -203,9 +202,9 @@ def _plot_data(visible, view_bounds, height_im, curve_im, sphere_mapping,
     right_extent, bottom_extent = sphere_mapping.pixel_to_long_lat((-1, -1))
     visible_ax.imshow(visible,
                       interpolation='nearest',
-                      extent=(left_extent, right_extent,
-                              bottom_extent, top_extent))
-                      #extent=view_bounds.to_extent())
+                      #extent=(left_extent, right_extent,
+                      #        bottom_extent, top_extent))
+                      extent=view_bounds.to_extent())
 
     # Dummy data for the profile plot. The profile plot is a side on view
     # showing:
@@ -405,8 +404,7 @@ def _get_visible(args):
     height_map = quadtree.HeightMap(height_im)
     visible = height_map.get_visible(
                                     eye_point,
-                                    )
-                                    #rect=view_bounds.to_pixels(sphere_mapping))
+                                    rect=view_bounds.to_pixels(sphere_mapping))
 
     return visible, view_bounds, height_im, curve_im, sphere_mapping, eye_point
 
