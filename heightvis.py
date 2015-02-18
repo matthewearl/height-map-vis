@@ -150,7 +150,9 @@ class _SphereMapping(object):
             origin_coords = (self.image_dims[1] // 2,
                              self.image_dims[0] // 2)
         else:
+            import pdb; pdb.set_trace()
             origin_coords = self.long_lat_to_pixel(origin)
+            origin_coords = origin_coords[1], origin_coords[0]
          
         long_diffs = long_lats[0] - long_lats[0][origin_coords]
         cos_angles = (numpy.sin(long_lats[1][origin_coords]) *
