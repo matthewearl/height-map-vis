@@ -346,7 +346,7 @@ def _get_visible(args):
     Return an image representing the visible part of the image.
 
     This calculation uses the --input-file, --view-{center,size}, --world-file,
-    and --eye-coords arguments.
+    --eye-coords, and --scale-factor arguments.
 
     """
     view_bounds = _get_view_bounds(args)
@@ -361,8 +361,9 @@ def _get_visible(args):
                                                     (height_im.shape[1],
                                                      height_im.shape[0]))
 
-    height_im = height_im[::10, ::10]
-    sphere_mapping = sphere_mapping[::10, ::10]
+    scale_factor = int(args.scale_factor) if args.scale_factor else 1
+    height_im = height_im[::scale_factor, ::scale_factor]
+    sphere_mapping = sphere_mapping[::scale_factor, ::scale_factor]
 
     # Obtain long/lat bounds for the height-map data based on the view bounds
     # extended to include the eye coordinate.
@@ -426,10 +427,14 @@ def main():
     parser = argparse.ArgumentParser(
         description='Determine line-of-sight visibility from a geo TIFF')
     parser.add_argument('--input-file', '-i',
-                        help='Input TIFF image',
+                        help='Input TIFF image height data.',
                         required=True)
+    parser.add_argument('--scale-factor', '-f',
+                        help='Scale the input height down by this (integer) '
+                             'factor')
     parser.add_argument('--world-file', '-w', 
-                        help='Input ESRI world file (.tfw)',
+                        help='Input ESRI world file (.tfw) for the height '
+                             'data',
                         required=True)
     parser.add_argument('--eye-coords', '-e',
                         help='Space separated latitude, longitude and height '
