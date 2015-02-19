@@ -18,14 +18,14 @@ Height vis will determinate line of sight visibility information for an object o
 
 <h2>Running</h2>
 
-Here's a sample invocation that plots visibility of the Shard from the area north of London.
+Here's a sample invocation that plots visibility of <a href="http://en.wikipedia.org/wiki/The_Shard">the Shard</a> from <a href="https://www.google.co.uk/maps/place/Newbury,+West+Berkshire/@51.3927652,-1.326874,12z/data=!4m2!3m1!1s0x487402002f595ba9:0xc6646baff4a75c50">the area surrounding Newbury</a>.
 
 ```
 python heightvis.py 
     -i data/srtm/srtm_36_02.tif -w data/srtm/srtm_36_02.tfw # SRTM data files,
     -e '51.5045 -0.0865 306'                                # Latitude/longitude/height of the target
     -o data/ras250_gb.zip                                   # 1:250 000 OS map data
-    -c '51.818051 -0.35404' -s 0.5                          # Coordinates of view centre, and view size in degrees.
+    -c '51.397849 -1.343434' -s 0.3                         # Coordinates of view centre, and view size in degrees.
 
 ```
 
