@@ -33,13 +33,13 @@ python heightvis.py
 
 The calculation will take a few minutes to complete, after which you'll be presented with an interactive display. The left hand side is a plot of visibility information: Grey areas are where the target is not visible:
 
-(Insert screenshot)
+<img src="https://raw.githubusercontent.com/matthewearl/height-map-vis/master/screenshots/lhs.png">Screenshot of LHS</img>
 
-Clicking on a point on the left hand side will update the right hand side with a cross-sectional profile view
+Clicking on a point on the left hand side will update the right hand side with a cross-sectional profile view:
 
-(Insert screenshot)
+<img src="https://raw.githubusercontent.com/matthewearl/height-map-vis/master/screenshots/rhs.png">Screenshot of RHS</img>
 
-This shows:
+In this case a visible (ie. not grey) point on the image was clicked. It shows three lines:
 * Blue line: Elevation of the terrain on the line between the clicked piece of terrain and the target.
 * Red line: Sight line from the terrain to the target. (If this intersects with the below, then the view is blocked.)
 * Green line: Earth curvature on the line between the clicked piece of terrain and the target. This is the offset applied to the raw height data to account for curvature of the earth.
